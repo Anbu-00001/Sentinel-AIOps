@@ -1,0 +1,27 @@
+{
+  "models": [
+    {
+      "model_version": "lgbm_v2.1",
+      "algorithm": "LightGBM",
+      "objective": "multiclass",
+      "n_classes": 10,
+      "best_iteration": 300,
+      "macro_f1": 0.0998,
+      "macro_precision": 0.0998,
+      "macro_recall": 0.1,
+      "timestamp": "2026-02-27T15:16:28.932531+00:00",
+      "artifacts": [
+        "lgbm_model.joblib",
+        "label_encoder.joblib",
+        "v2_report.json",
+        "feature_importance.png"
+      ]
+    }
+  ],
+  "latest": "lgbm_v2.1",
+  "retrain_suggested": true,
+  "last_drift_check": "2026-02-27T15:35:40.750671+00:00",
+  "retrain_required": false,
+  "feedback_count": 1,
+  "feedback_last_updated": "2026-02-27T15:52:17.912170+00:00"
+}

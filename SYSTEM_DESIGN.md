@@ -1,0 +1,172 @@
+# 🏗️ SYSTEM_DESIGN.md — Sentinel-AIOps Architecture
+
+## Overview
+
+Sentinel-AIOps is an event-driven MLOps platform for CI/CD log anomaly detection. The system ingests real-time log streams, classifies failures using a LightGBM multiclass model, monitors feature drift, collects human feedback, and exposes observability metrics via Prometheus.
+
+## End-to-End Architecture
+
+```mermaid
+flowchart TB
+    subgraph Ingestion["📥 Data Ingestion"]
+        SS["Stream Simulator<br/>FastAPI :8100"]
+        CM["Chaos Mode<br/>5x OOD Injection"]
+        SS --> CM
+    end
+
+    subgraph MLPipeline["🧠 ML Pipeline"]
+        PP["Preprocessor<br/>Scaler + Hasher + TF-IDF"]
+        LGBM["LightGBM v2<br/>Multiclass (10 classes)"]
+        REG["Model Registry<br/>registry.json"]
+        PP --> LGBM --> REG
+    end
+
+    subgraph Inference["⚡ FastMCP Server :9090"]
+        MCP["analyze_log Tool<br/>Schema Validation"]
+        PROM["Prometheus /metrics<br/>Latency · Drift · Anomalies"]
+        MCP --> PROM
+    end
+
+    subgraph Monitoring["📊 Observability"]
+        DM["Drift Monitor<br/>PSI + Chi-Square"]
+        DR["drift_report.json"]
+        DM --> DR
+    end
+
+    subgraph Feedback["👤 Human-in-the-Loop"]
+        FH["Feedback Handler<br/>submit_human_correction"]
+        LBL["labels.json<br/>Thread-Safe Store"]
+        RT["Retrain Trigger<br/>count > 100"]
+        FH --> LBL --> RT
+    end
+
+    subgraph Dashboard["🖥️ Dashboard :8200"]
+        UI["Observability UI<br/>Health Badge + Heatmap"]
+        API["REST API<br/>/api/dashboard · /api/drift"]
+    end
+
+    SS -->|"JSON Logs"| MCP
+    MCP -->|"Predictions"| UI
+    DR -->|"Drift Scores"| PROM
+    DR -->|"Heatmap Data"| UI
+    RT -->|"retrain_required"| REG
+    PROM -->|"Scraped by"| UI
+
+    style Ingestion fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style MLPipeline fill:#1a2e1a,stroke:#22c55e,color:#e2e8f0
+    style Inference fill:#2e1a1a,stroke:#ef4444,color:#e2e8f0
+    style Monitoring fill:#2e2a1a,stroke:#eab308,color:#e2e8f0
+    style Feedback fill:#1a2e2e,stroke:#06b6d4,color:#e2e8f0
+    style Dashboard fill:#2e1a2e,stroke:#a855f7,color:#e2e8f0
+```
+
+## Component Details
+
+### 1. Data Ingestion (`/data/stream_simulator.py`)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Health check |
+| `/stream?count=N&chaos=level` | GET | Batch log generation |
+| `/stream/single?chaos=level` | GET | Single log record |
+
+**Chaos Levels**: `none` (0%), `low` (10%), `medium` (30%), `high` (60%), `extreme` (100%)
+
+OOD injection multiplies all numerical features by **5x** above training maximum.
+
+### 2. ML Pipeline (`/models/`)
+
+```mermaid
+flowchart LR
+    RAW["Raw CSV<br/>45K rows × 25 cols"] --> FE["Feature Engineering"]
+    FE --> NUM["StandardScaler<br/>6 numerical"]
+    FE --> HASH["FeatureHasher<br/>64 buckets"]
+    FE --> TFIDF["TF-IDF<br/>500 features"]
+    FE --> DUMMY["One-Hot<br/>~22 cols"]
+    NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix<br/>592 features"]
+    MAT --> LGBM["LightGBM GBDT<br/>300 rounds"]
+    LGBM --> PRED["10-Class Prediction"]
+```
+
+### 3. Inference Server (`/mcp-server/server.py`)
+
+**Prometheus Metrics** exposed on `:9090/metrics`:
+
+| Metric | Type | Description |
+|---|---|---|
+| `inference_latency_seconds` | Histogram | Per-request inference time |
+| `total_anomalies_detected` | Counter | Logs classified with confidence > 0.5 |
+| `total_inferences` | Counter | All inference requests |
+| `model_drift_score` | Gauge | Max PSI score from drift report |
+| `inference_errors_total` | Counter | Failed inference requests |
+
+### 4. Drift Monitor (`/models/drift_monitor.py`)
+
+| Feature Type | Method | Threshold |
+|---|---|---|
+| Numerical | PSI (Population Stability Index) | > 0.2 → retrain |
+| Categorical | Chi-Square test | p < 0.05 → drifted |
+
+### 5. Feedback Loop (`/mcp-server/feedback_handler.py`)
+
+```mermaid
+sequenceDiagram
+    participant User as Human Reviewer
+    participant FH as Feedback Handler
+    participant FS as labels.json
+    participant REG as registry.json
+
+    User->>FH: submit_human_correction(log_id, label)
+    FH->>FH: Pydantic validation
+    FH->>FS: Thread-safe append
+    FH->>REG: Update count
+    alt count > 100
+        FH->>REG: retrain_required = true
+        REG-->>User: ⚠️ Retrain triggered
+    end
+```
+
+### 6. Dashboard (`/dashboard/app.py`)
+
+| Endpoint | Description |
+|---|---|
+| `/` | Full HTML dashboard with drift heatmap |
+| `/api/dashboard` | JSON payload (health, heatmap, model info) |
+| `/api/drift` | Raw drift report |
+| `/api/registry` | Model registry |
+
+**Health Badge Logic**:
+- 🟢 **Healthy** — No features drifted
+- 🟡 **Drift Detected** — Some features drifted, PSI < threshold
+- 🔴 **Training Required** — PSI > 0.2 on any numerical feature
+
+## Infrastructure
+
+### Docker Compose Services
+
+| Service | Port | Container |
+|---|---|---|
+| MCP Server | 9090 | `sentinel-mcp` |
+| Stream Simulator | 8100 | `sentinel-stream` |
+| Dashboard | 8200 | `sentinel-dashboard` |
+
+### CI/CD Pipeline (`.github/workflows/ci.yml`)
+
+```mermaid
+flowchart LR
+    PUSH["git push"] --> LINT["flake8<br/>PEP8 check"]
+    LINT --> TEST["pytest<br/>8 model tests"]
+    TEST --> PASS["✅ CI Green"]
+```
+
+## Data Flow Summary
+
+```
+[CI/CD Logs] → Stream Simulator → MCP Server → LightGBM → Prediction
+                                      ↓               ↓
+                              Prometheus Metrics   Drift Monitor
+                                      ↓               ↓
+                                  Dashboard ←── drift_report.json
+                                      ↑
+                              Feedback Handler ← Human Corrections
+```

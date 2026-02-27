@@ -1,0 +1,52 @@
+{
+  "numerical_cols": [
+    "build_duration_sec",
+    "test_duration_sec",
+    "deploy_duration_sec",
+    "cpu_usage_pct",
+    "memory_usage_mb",
+    "retry_count"
+  ],
+  "high_card_cols": [
+    "repository",
+    "author"
+  ],
+  "low_card_cols": [
+    "ci_tool",
+    "language",
+    "os",
+    "cloud_provider",
+    "failure_stage",
+    "severity"
+  ],
+  "bool_cols": [
+    "is_flaky_test",
+    "rollback_triggered",
+    "incident_created"
+  ],
+  "text_col": "error_message",
+  "label_col": "failure_type",
+  "hash_n_features": 64,
+  "tfidf_max_features": 500,
+  "dummy_column_order": [
+    "ci_tool_CircleCI",
+    "ci_tool_GitHub Actions",
+    "ci_tool_GitLab CI",
+    "ci_tool_Jenkins",
+    "language_Go",
+    "language_Java",
+    "language_NodeJS",
+    "language_Python",
+    "language_Rust",
+    "os_ubuntu-latest",
+    "os_windows-latest",
+    "cloud_provider_Azure",
+    "cloud_provider_GCP",
+    "cloud_provider_On-Prem",
+    "failure_stage_deploy",
+    "failure_stage_test",
+    "severity_HIGH",
+    "severity_LOW",
+    "severity_MEDIUM"
+  ]
+}

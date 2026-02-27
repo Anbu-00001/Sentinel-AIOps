@@ -1,0 +1,20 @@
+{
+  "model": "IsolationForest",
+  "n_estimators": 200,
+  "contamination": 0.1,
+  "training_samples": 45000,
+  "feature_dim": 592,
+  "validation_proxy_classes": [
+    "Resource Exhaustion",
+    "Security Scan Failure",
+    "Timeout"
+  ],
+  "f1_score": 0.1494,
+  "pr_auc": 0.2986,
+  "anomaly_score_stats": {
+    "min": 0.7472,
+    "max": 0.7941,
+    "mean": 0.7737,
+    "std": 0.0048
+  }
+}

@@ -1,0 +1,42 @@
+# Sentinel-AIOps Advanced .gitignore
+
+# ── Python Standard ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── ML Artifacts & Data ───────────────────────────────────────────────────────
+# Ignore raw Kaggle datasets to keep repo lightweight
+data/raw/*.csv
+data/raw/*.zip
+
+# Ignore large generated feature matrices
+data/*.npz
+data/labels.npy
+data/data_summary.json
+
+# Ignore scikit-learn/LightGBM joblib artifacts (~100MB+)
+models/*.joblib
+
+# Ignore runtime reports (optional, uncomment if you want them tracked)
+# models/*.json
+# models/*.png
+
+# Ignore human log subsets
+data/feedback/*.json
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+*.swp
