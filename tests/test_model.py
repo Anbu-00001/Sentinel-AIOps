@@ -7,10 +7,8 @@ produce expected output shapes.
 
 import json
 import os
-import sys
 
 import joblib
-import numpy as np
 import pytest
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

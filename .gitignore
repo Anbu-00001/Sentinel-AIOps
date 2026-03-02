@@ -25,6 +25,9 @@ data/*.npz
 data/labels.npy
 data/data_summary.json
 
+# Ignore SQLite databases
+data/*.db
+
 # Ignore scikit-learn/LightGBM joblib artifacts (~100MB+)
 models/*.joblib
 

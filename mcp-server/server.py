@@ -16,6 +16,7 @@ Workflow Rules (AGENTS.md):
 import json
 import logging
 import os
+import sys
 import time
 from typing import Any, Dict
 
@@ -31,6 +32,10 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
 )
 from scipy.sparse import csr_matrix, hstack
+
+# Allow imports from project root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database import LogEntry, get_session, init_db  # noqa: E402
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -129,6 +134,10 @@ except FileNotFoundError as exc:
         "CRITICAL: Missing model artifact — %s. Run train_v2.py first.", exc
     )
     raise SystemExit(1) from exc
+
+# ── Initialize database ──────────────────────────────────────────────────────
+log.info("Reasoning: Initializing SQLite database for inference persistence.")
+init_db()
 
 # Build readable feature names
 _feature_names: list[str] = []
@@ -286,6 +295,20 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
         "Result → prediction=%s | confidence=%.4f | latency=%.4fs",
         prediction, confidence, latency,
     )
+
+    # ── Persist to database ──────────────────────────────────────────────
+    try:
+        with get_session() as session:
+            entry = LogEntry(
+                metrics_payload=features,
+                prediction=prediction,
+                confidence=confidence,
+                top_features=top_features,
+            )
+            session.add(entry)
+        log.info("Inference persisted to database (prediction=%s).", prediction)
+    except Exception as db_exc:
+        log.warning("DB write failed (non-fatal): %s", db_exc)
 
     return {
         "prediction": prediction,

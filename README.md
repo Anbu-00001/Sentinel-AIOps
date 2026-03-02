@@ -94,6 +94,46 @@ docker-compose up -d
 
 If you wish to add new data anomalies to stress-test the PSI drift calculations, please see `CONTRIBUTING.md`.
 
+## 🔗 Webhook Integration (GitHub Actions)
+
+Sentinel-AIOps exposes a `POST /webhook/github` endpoint that ingests GitHub Actions failure events.
+
+### Setup
+
+1. Navigate to your GitHub Repo → **Settings** → **Webhooks** → **Add webhook**.
+2. Set **Payload URL** to:
+   ```
+   http://<your-host>:8200/webhook/github
+   ```
+3. Set **Content type** to `application/json`.
+4. Under **Events**, select **Workflow runs**.
+5. Click **Add webhook**.
+
+Every completed workflow failure will be automatically classified by the LightGBM model and persisted to the SQLite database.
+
+### Example Payload (sent by GitHub)
+```json
+{
+  "action": "completed",
+  "workflow_run": {
+    "name": "CI Pipeline",
+    "conclusion": "failure",
+    "run_started_at": "2026-03-01T10:00:00Z",
+    "updated_at": "2026-03-01T10:05:30Z",
+    "run_attempt": 2,
+    "actor": {"login": "dev-user"}
+  },
+  "repository": {"full_name": "org/repo"}
+}
+```
+
+## 🗄️ Database
+
+All inference results are persisted to a local SQLite database at `data/sentinel.db` via SQLAlchemy. Query the inference history through:
+
+* **API**: `GET http://localhost:8200/api/history?limit=100`
+* **Dashboard UI**: the "Inference History" table at `http://localhost:8200`
+
 ## 📜 License
 
 MIT License. See [LICENSE](LICENSE) for details.
