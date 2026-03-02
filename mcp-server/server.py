@@ -300,7 +300,9 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
     try:
         with get_session() as session:
             entry = LogEntry(
+                event_source="mcp",
                 metrics_payload=features,
+                raw_payload=dict(features),   # immutable audit copy
                 prediction=prediction,
                 confidence=confidence,
                 top_features=top_features,

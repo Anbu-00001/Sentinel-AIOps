@@ -94,22 +94,39 @@ docker-compose up -d
 
 If you wish to add new data anomalies to stress-test the PSI drift calculations, please see `CONTRIBUTING.md`.
 
+## ⚡ Zero-Config Quick Start (AIOps Control Tower)
+
+Connect your GitHub repository to Sentinel-AIOps in three commands:
+
+```bash
+# 1. Launch the full stack
+git clone https://github.com/your-org/Sentinel-AIOps.git && cd Sentinel-AIOps
+docker-compose up -d
+
+# 2. Add webhook in GitHub → Settings → Webhooks → Add webhook
+#    Payload URL:  http://<your-ip>:8200/webhook/github
+#    Content type: application/json
+#    Events:       Workflow runs
+
+# 3. View live CI/CD failure predictions
+#    Open http://localhost:8200
+```
+
+> Every GitHub Actions failure is **automatically classified** by the LightGBM model, **persisted** to SQLite, and visible in the **Inference History** dashboard — zero additional config required.
+
+---
+
 ## 🔗 Webhook Integration (GitHub Actions)
 
-Sentinel-AIOps exposes a `POST /webhook/github` endpoint that ingests GitHub Actions failure events.
+`POST /webhook/github` ingests GitHub Actions `workflow_run` failure events.
 
-### Setup
+| Field | Value |
+|---|---|
+| **Payload URL** | `http://<your-ip>:8200/webhook/github` |
+| **Content type** | `application/json` |
+| **Events** | Workflow runs |
 
-1. Navigate to your GitHub Repo → **Settings** → **Webhooks** → **Add webhook**.
-2. Set **Payload URL** to:
-   ```
-   http://<your-host>:8200/webhook/github
-   ```
-3. Set **Content type** to `application/json`.
-4. Under **Events**, select **Workflow runs**.
-5. Click **Add webhook**.
-
-Every completed workflow failure will be automatically classified by the LightGBM model and persisted to the SQLite database.
+**Logic:** The endpoint only processes events where `action == "completed"` AND `conclusion` is `"failure"` or `"timed_out"`. All other events return `{"status": "ignored"}` immediately (no DB write).
 
 ### Example Payload (sent by GitHub)
 ```json
@@ -127,12 +144,24 @@ Every completed workflow failure will be automatically classified by the LightGB
 }
 ```
 
-## 🗄️ Database
+## 🗄️ Database & Schema
 
-All inference results are persisted to a local SQLite database at `data/sentinel.db` via SQLAlchemy. Query the inference history through:
+All inference results are persisted to `data/sentinel.db` (SQLite via SQLAlchemy). The `LogEntry` table schema:
 
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key |
+| `timestamp` | DATETIME | UTC inference time |
+| `event_source` | STRING | `"mcp"` or `"github_webhook"` |
+| `metrics_payload` | JSON | Transformed feature dict |
+| `raw_payload` | JSON | Original un-transformed input (audit) |
+| `prediction` | STRING | LightGBM failure class |
+| `confidence_score` | FLOAT | Model confidence |
+| `psi_drift_stat` | FLOAT | Optional per-row drift stat |
+
+**Query the history:**
 * **API**: `GET http://localhost:8200/api/history?limit=100`
-* **Dashboard UI**: the "Inference History" table at `http://localhost:8200`
+* **Dashboard**: Inference History table at `http://localhost:8200`
 
 ## 📜 License
 

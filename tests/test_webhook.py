@@ -71,11 +71,14 @@ class TestGitHubWebhook:
         response = client.post("/webhook/github", json=payload)
         assert response.status_code == 200
 
-    def test_webhook_minimal_payload(self, client) -> None:
-        """A payload with only the required 'action' field is accepted."""
+    def test_webhook_minimal_payload_is_ignored(self, client) -> None:
+        """A payload with only 'action' and no failure conclusion is ignored."""
         payload = {"action": "completed"}
         response = client.post("/webhook/github", json=payload)
         assert response.status_code == 200
+        # No workflow_run → conclusion is empty → should be ignored
+        data = response.json()
+        assert data.get("status") == "ignored"
 
     def test_webhook_missing_action_returns_422(self, client) -> None:
         """Missing the required 'action' field triggers validation error."""
@@ -87,6 +90,16 @@ class TestGitHubWebhook:
         """An empty JSON body triggers validation error."""
         response = client.post("/webhook/github", json={})
         assert response.status_code == 422
+
+    def test_webhook_success_conclusion_ignored(self, client) -> None:
+        """A success conclusion returns 200 with status: ignored."""
+        payload = {
+            "action": "completed",
+            "workflow_run": {"conclusion": "success"},
+        }
+        response = client.post("/webhook/github", json=payload)
+        assert response.status_code == 200
+        assert response.json().get("status") == "ignored"
 
 
 class TestDashboardEndpoints:

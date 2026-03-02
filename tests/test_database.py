@@ -107,7 +107,9 @@ class TestLogEntryCRUD:
         d = result.to_dict()
         assert set(d.keys()) == {
             "id", "timestamp", "metrics_payload",
-            "prediction", "confidence", "top_features",
+            "prediction", "confidence", "confidence_score",
+            "top_features", "event_source", "raw_payload",
+            "psi_drift_stat",
         }
         assert d["prediction"] == "Test Failure"
 
