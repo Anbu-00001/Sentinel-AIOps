@@ -224,14 +224,120 @@ def _build_heatmap(drift_report: Optional[dict]) -> list[DriftHeatmapEntry]:
     ]
 
 
+# Key numeric features we track for live drift
+_DRIFT_FEATURES = [
+    "build_duration_sec",
+    "test_duration_sec",
+    "deploy_duration_sec",
+    "cpu_usage_pct",
+    "memory_usage_mb",
+    "retry_count",
+]
+
+# Approximate training-time baseline means (used for PSI approximation)
+_BASELINE_MEANS: dict[str, float] = {
+    "build_duration_sec": 120.0,
+    "test_duration_sec": 60.0,
+    "deploy_duration_sec": 30.0,
+    "cpu_usage_pct": 50.0,
+    "memory_usage_mb": 2048.0,
+    "retry_count": 0.5,
+}
+
+
+def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
+    """
+    Compute a live PSI-like drift score for key numeric features
+    using the last 100 inference records from SQLite.
+
+    Method: for each feature, compare the mean of the last 100
+    observations against the training baseline mean. We compute
+    a normalised deviation that mimics PSI severity thresholds:
+      score < 0.10 -> stable
+      0.10 <= score < 0.25 -> moderate drift
+      score >= 0.25 -> severe drift / retrain required
+    """
+    try:
+        with get_session() as session:
+            rows = (
+                session.query(LogEntry.metrics_payload)
+                .order_by(LogEntry.timestamp.desc())
+                .limit(100)
+                .all()
+            )
+    except Exception as exc:
+        log.warning("Dynamic PSI query failed: %s", exc)
+        return []
+
+    if not rows:
+        return []
+
+    # Aggregate feature values from JSON payloads
+    feature_values: dict[str, list[float]] = {f: [] for f in _DRIFT_FEATURES}
+    for (payload,) in rows:
+        if not isinstance(payload, dict):
+            continue
+        for feat in _DRIFT_FEATURES:
+            val = payload.get(feat)
+            if isinstance(val, (int, float)):
+                feature_values[feat].append(float(val))
+
+    entries: list[DriftHeatmapEntry] = []
+    for feat in _DRIFT_FEATURES:
+        vals = feature_values[feat]
+        if not vals:
+            continue
+        live_mean = sum(vals) / len(vals)
+        baseline = _BASELINE_MEANS.get(feat, 1.0)
+        # Normalised absolute deviation scaled to [0, 1]
+        psi_score = abs(live_mean - baseline) / (baseline + 1e-9)
+        psi_score = round(min(psi_score, 1.0), 4)
+
+        if psi_score >= 0.25:
+            severity = "severe"
+        elif psi_score >= 0.10:
+            severity = "moderate"
+        else:
+            severity = "stable"
+
+        entries.append(DriftHeatmapEntry(
+            feature=feat,
+            method="PSI (live-DB)",
+            score=psi_score,
+            severity=severity,
+            is_drifted=psi_score >= 0.10,
+        ))
+
+    return entries
+
+
+def _get_heatmap(drift_report: Optional[dict]) -> list[DriftHeatmapEntry]:
+    """
+    Return heatmap entries, preferring the static drift_report.json but
+    falling back (and merging) with the live SQL-computed PSI scores.
+    """
+    static_entries = _build_heatmap(drift_report)
+    dynamic_entries = _compute_dynamic_psi()
+
+    if not static_entries:
+        # No JSON report — use dynamic SQL-based PSI exclusively
+        return dynamic_entries
+
+    # Merge: prefer static entries but append any dynamic features
+    # that are not already covered by the JSON report
+    static_features = {e.feature for e in static_entries}
+    extra = [e for e in dynamic_entries if e.feature not in static_features]
+    return static_entries + extra
+
+
 def _map_github_to_features(payload: GitHubWebhookPayload) -> dict[str, Any]:
     """
     Map a GitHub webhook payload into the analyze_log feature schema.
 
     Uses workflow_run or check_run data to synthesize CI/CD metrics.
+    For cpu_usage_pct and memory_usage_mb, extracts from the payload
+    if custom fields are present, otherwise uses deterministic estimates.
     """
-    import random
-
     repo_name = ""
     author = ""
     failure_stage = "build"
@@ -281,9 +387,20 @@ def _map_github_to_features(payload: GitHubWebhookPayload) -> dict[str, Any]:
         "build_duration_sec": build_dur,
         "test_duration_sec": test_dur,
         "deploy_duration_sec": deploy_dur,
-        "cpu_usage_pct": round(random.uniform(20.0, 80.0), 1),
-        "memory_usage_mb": random.randint(512, 8192),
-        "retry_count": wf.get("run_attempt", 1) - 1,
+        # Extract cpu/memory from payload if client passes them in workflow metadata
+        # (via repository dispatch client_payload or outputs). Fall back to
+        # deterministic estimates derived from run duration (no random values).
+        "cpu_usage_pct": float(
+            wf.get("cpu_usage_pct")                     # custom field if present
+            or (payload.repository or {}).get("cpu_usage_pct", None)
+            or max(10.0, min(95.0, build_dur / 3.0))    # estimate from duration
+        ),
+        "memory_usage_mb": int(
+            wf.get("memory_usage_mb")                   # custom field if present
+            or (payload.repository or {}).get("memory_usage_mb", None)
+            or max(256, min(8192, build_dur * 12))       # estimate from duration
+        ),
+        "retry_count": max(0, wf.get("run_attempt", 1) - 1),
         "error_message": error_message,
         "repository": repo_name,
         "author": author,
@@ -317,7 +434,7 @@ async def get_dashboard_data() -> DashboardData:
     db_signal = _compute_health_from_db()
     return DashboardData(
         health=_compute_health(drift_report, registry, db_signal),
-        drift_heatmap=_build_heatmap(drift_report),
+        drift_heatmap=_get_heatmap(drift_report),
         model_version=registry.get("latest") if registry else None,
         feedback_count=_load_feedback_count(),
         inference_count=_get_inference_count(),

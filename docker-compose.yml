@@ -11,58 +11,41 @@ services:
       - "9090:9090"   # Prometheus /metrics
     volumes:
       - ./models:/app/models:ro
-      - ./data/feedback:/app/data/feedback
+      - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - SENTINEL_DB_PATH=/app/data/sentinel.db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # ── Stream Simulator ───────────────────────────────────────────────────────
-  stream-simulator:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sentinel-stream
-    command: ["python", "data/stream_simulator.py"]
-    ports:
-      - "8100:8100"   # FastAPI stream endpoints
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ── Observability Dashboard ────────────────────────────────────────────────
+  # ── Observability Dashboard + Webhook Receiver ─────────────────────────────
   dashboard:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: sentinel-dashboard
-    command: ["python", "dashboard/app.py"]
+    command: ["python3", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8200", "--workers", "4"]
     ports:
-      - "8200:8200"   # Dashboard UI + API
+      - "8200:8200"   # Dashboard UI + API + Webhook
     volumes:
       - ./models:/app/models:ro
-      - ./data/feedback:/app/data/feedback:ro
+      - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - SENTINEL_DB_PATH=/app/data/sentinel.db
     depends_on:
       mcp-server:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
 
 volumes:
-  model-data:
-  feedback-data:
+  sentinel-data:

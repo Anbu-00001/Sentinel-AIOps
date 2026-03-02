@@ -71,29 +71,63 @@ flowchart TB
     style Feedback fill:#1e293b,stroke:#8b5cf6,color:#f8fafc
 ```
 
-## 🚀 Quick Start (Docker Compose)
+## ⚡ 3-Step Quickstart
 
-The entire MLOps platform is containerized.
+Get from zero to a live AIOps control tower in under 60 seconds:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/Sentinel-AIOps.git
-cd Sentinel-AIOps
-
-# 2. Extract or generate models
-# (Ensure models are in /models and feedback in /data/feedback)
-
-# 3. Launch the Stack
+# Step 1 — Clone & launch
+git clone https://github.com/Anbu-00001/Sentinel-AIOps.git && cd Sentinel-AIOps
 docker-compose up -d
 
-# 4. View Observability Dashboard
-# Open http://localhost:8200 in your browser
+# Step 2 — Add your GitHub Webhook
+# GitHub Repo → Settings → Webhooks → Add webhook
+# Payload URL:  http://<your-ip>:8200/webhook/github
+# Content type: application/json   Events: Workflow runs
+
+# Step 3 — View live predictions
+# Open http://localhost:8200
 ```
 
-## 🛠️ Modifying the Chaos Simulator
+> Every CI/CD failure is **automatically classified**, **persisted to SQLite**, and visible in the dashboard — no extra configuration needed.
 
-If you wish to add new data anomalies to stress-test the PSI drift calculations, please see `CONTRIBUTING.md`.
+---
 
+## 🧬 Technical Novelty: Self-Aware Model Monitoring
+
+Most MLOps tools alert engineers when a model crashes. Sentinel-AIOps goes further — it alerts when a **model is about to become untrustworthy**, before failures reach production.
+
+### How the Self-Awareness Works
+
+```
+Training distribution (K8s CI builds, 2024)
+        │
+        ▼
+  SQLite stores every inference: confidence, feature values, source
+        │
+        ▼
+  _compute_dynamic_psi()  ← queries last 100 rows every dashboard refresh
+        │   calculates: |live_mean - baseline_mean| / baseline_mean
+        ▼
+  PSI Score ≥ 0.10  →  🟡 Drift Detected — investigate
+  PSI Score ≥ 0.25  →  🔴 Training Required — retrain now
+```
+
+### Population Stability Index (PSI)
+
+PSI is the gold-standard stability metric in financial risk modelling, now applied to CI/CD failure prediction:
+
+| PSI Score | Status | Meaning |
+|-----------|--------|---------|
+| `< 0.10` | 🟢 Stable | Live distribution matches training — model trustworthy |
+| `0.10–0.25` | 🟡 Moderate Drift | Distribution shifting — monitor closely |
+| `≥ 0.25` | 🔴 Severe Drift | Model trained on stale data — **retrain required** |
+
+### Why This Matters
+
+Without this mechanism, an engineer has no way of knowing that the LightGBM model making predictions about *today's* Kubernetes builds was trained on *last year's* data. PSI makes the model **self-report its own relevance** — preventing engineers from blindly trusting stale predictions in high-stakes incidents.
+
+---
 ## ⚡ Zero-Config Quick Start (AIOps Control Tower)
 
 Connect your GitHub repository to Sentinel-AIOps in three commands:
