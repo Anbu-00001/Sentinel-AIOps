@@ -450,6 +450,51 @@ async def get_drift_report() -> dict[str, Any]:
     return report
 
 
+@app.get("/api/psi")
+async def get_psi_scores() -> dict[str, Any]:
+    """
+    Return live PSI drift scores computed from the last 100 SQL inference records.
+
+    Compares the 'current window' (SQLite last-100 rows) against the
+    'training baseline' stored in _BASELINE_MEANS. Returns per-feature scores,
+    severity labels, and an overall system status.
+    """
+    log.info("Reasoning: Computing live PSI scores from SQL window.")
+    entries = _compute_dynamic_psi()
+    if not entries:
+        return {
+            "status": "no_data",
+            "message": "No inference records in database yet.",
+            "features": [],
+        }
+
+    severe = [e for e in entries if e.severity == "severe"]
+    moderate = [e for e in entries if e.severity == "moderate"]
+
+    if severe:
+        overall = "Training Required"
+    elif moderate:
+        overall = "Drift Detected"
+    else:
+        overall = "Healthy"
+
+    return {
+        "status": overall,
+        "sample_size": 100,
+        "baseline_source": "training_means",
+        "features": [
+            {
+                "feature": e.feature,
+                "method": e.method,
+                "psi_score": e.score,
+                "severity": e.severity,
+                "is_drifted": e.is_drifted,
+            }
+            for e in entries
+        ],
+    }
+
+
 @app.get("/api/registry")
 async def get_registry() -> dict[str, Any]:
     """Return model registry."""
