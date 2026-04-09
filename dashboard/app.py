@@ -23,10 +23,12 @@ from typing import Any, Optional
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
+from fastapi.concurrency import run_in_threadpool
 
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import LogEntry, get_session, init_db  # noqa: E402
+from config import PSI_SEVERE_THRESHOLD, PSI_MODERATE_THRESHOLD, RETRAIN_THRESHOLD
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -139,10 +141,10 @@ def _get_inference_count() -> int:
 
 def _compute_health_from_db() -> Optional[dict]:
     """
-    Derive a live drift signal from the last 100 inference records.
+    Derive a live drift signal from the last inference records.
 
     Returns a dict with keys:
-      - db_mean_confidence: mean confidence of last 100 inferences
+      - db_mean_confidence: mean confidence of recent inferences
       - db_retrain_suggested: True if mean confidence < 0.45
       - db_sample_size: number of rows used
     Returns None if DB has no data.
@@ -152,7 +154,7 @@ def _compute_health_from_db() -> Optional[dict]:
             rows = (
                 session.query(LogEntry.confidence)
                 .order_by(LogEntry.timestamp.desc())
-                .limit(100)
+                .limit(RETRAIN_THRESHOLD)
                 .all()
             )
         if not rows:
@@ -248,21 +250,18 @@ _BASELINE_MEANS: dict[str, float] = {
 def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
     """
     Compute a live PSI-like drift score for key numeric features
-    using the last 100 inference records from SQLite.
+    using the recent inference records from SQLite.
 
-    Method: for each feature, compare the mean of the last 100
+    Method: for each feature, compare the mean of the recent
     observations against the training baseline mean. We compute
-    a normalised deviation that mimics PSI severity thresholds:
-      score < 0.10 -> stable
-      0.10 <= score < 0.25 -> moderate drift
-      score >= 0.25 -> severe drift / retrain required
+    a normalised deviation that mimics PSI severity thresholds.
     """
     try:
         with get_session() as session:
             rows = (
                 session.query(LogEntry.metrics_payload)
                 .order_by(LogEntry.timestamp.desc())
-                .limit(100)
+                .limit(RETRAIN_THRESHOLD)
                 .all()
             )
     except Exception as exc:
@@ -293,9 +292,9 @@ def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
         psi_score = abs(live_mean - baseline) / (baseline + 1e-9)
         psi_score = round(min(psi_score, 1.0), 4)
 
-        if psi_score >= 0.25:
+        if psi_score >= PSI_SEVERE_THRESHOLD:
             severity = "severe"
-        elif psi_score >= 0.10:
+        elif psi_score >= PSI_MODERATE_THRESHOLD:
             severity = "moderate"
         else:
             severity = "stable"
@@ -305,7 +304,7 @@ def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
             method="PSI (live-DB)",
             score=psi_score,
             severity=severity,
-            is_drifted=psi_score >= 0.10,
+            is_drifted=psi_score >= PSI_MODERATE_THRESHOLD,
         ))
 
     return entries
@@ -480,7 +479,7 @@ async def get_psi_scores() -> dict[str, Any]:
 
     return {
         "status": overall,
-        "sample_size": 100,
+        "sample_size": RETRAIN_THRESHOLD,
         "baseline_source": "training_means",
         "features": [
             {
@@ -583,7 +582,7 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
         }
 
     # ── Always persist to DB with event_source tag ────────────────────
-    try:
+    def _save_webhook():
         with get_session() as session:
             entry = LogEntry(
                 event_source="github_webhook",
@@ -594,6 +593,9 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
                 top_features=top_features,
             )
             session.add(entry)
+            
+    try:
+        await run_in_threadpool(_save_webhook)
         log.info(
             "Webhook entry persisted (conclusion=%s, prediction=%s).",
             conclusion, prediction,

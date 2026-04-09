@@ -38,8 +38,11 @@ MODELS_DIR = os.path.join(ROOT, "models")
 DATA_DIR = os.path.join(ROOT, "data")
 
 # ── PSI threshold ─────────────────────────────────────────────────────────────
-PSI_THRESHOLD: float = 0.2
-PSI_BINS: int = 10
+import sys
+sys.path.insert(0, ROOT)
+from config import PSI_SEVERE_THRESHOLD, PSI_BINS
+
+PSI_THRESHOLD: float = PSI_SEVERE_THRESHOLD
 
 # ── Feature lists (consistent with preprocess.py) ─────────────────────────────
 NUMERICAL_COLS: list[str] = [
@@ -103,7 +106,7 @@ def compute_psi(
     cur_counts, _ = np.histogram(current, bins=bins)
 
     # Normalize to proportions (add epsilon to avoid log(0))
-    eps: float = 1e-8
+    eps: float = 0.0001
     ref_pct = (ref_counts + eps) / (ref_counts.sum() + eps * n_bins)
     cur_pct = (cur_counts + eps) / (cur_counts.sum() + eps * n_bins)
 
@@ -278,7 +281,7 @@ def main() -> None:
 
     # Import stream simulator
     import sys
-    sys.path.insert(0, os.path.join(ROOT, "data"))
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
     from stream_simulator import ChaosLevel, log_generator
 
     # Generate a window of 200 live logs with moderate chaos

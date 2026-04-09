@@ -19,6 +19,10 @@ import os
 import sys
 import time
 from typing import Any, Dict
+from concurrent.futures import ThreadPoolExecutor
+
+# Global thread pool for offloading database I/O
+_db_pool = ThreadPoolExecutor(max_workers=4)
 
 import joblib
 import numpy as np
@@ -296,21 +300,24 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
         prediction, confidence, latency,
     )
 
-    # ── Persist to database ──────────────────────────────────────────────
-    try:
-        with get_session() as session:
-            entry = LogEntry(
-                event_source="mcp",
-                metrics_payload=features,
-                raw_payload=dict(features),   # immutable audit copy
-                prediction=prediction,
-                confidence=confidence,
-                top_features=top_features,
-            )
-            session.add(entry)
-        log.info("Inference persisted to database (prediction=%s).", prediction)
-    except Exception as db_exc:
-        log.warning("DB write failed (non-fatal): %s", db_exc)
+    # ── Persist to database (non-blocking) ───────────────────────────────
+    def _save_inference():
+        try:
+            with get_session() as session:
+                entry = LogEntry(
+                    event_source="mcp",
+                    metrics_payload=features,
+                    raw_payload=dict(features),   # immutable audit copy
+                    prediction=prediction,
+                    confidence=confidence,
+                    top_features=top_features,
+                )
+                session.add(entry)
+            log.info("Inference persisted to database (prediction=%s).", prediction)
+        except Exception as db_exc:
+            log.warning("DB write failed (non-fatal): %s", db_exc)
+
+    _db_pool.submit(_save_inference)
 
     return {
         "prediction": prediction,
