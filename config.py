@@ -5,7 +5,6 @@ Centralized configuration block to avoid hardcoded magic numbers.
 """
 
 import os
-from typing import Optional
 
 # ── Feature Drift & Anomalies ────────────────────────────────────────────────
 PSI_SEVERE_THRESHOLD: float = float(os.getenv("PSI_SEVERE_THRESHOLD", "0.20"))

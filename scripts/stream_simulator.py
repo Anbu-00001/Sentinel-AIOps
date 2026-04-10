@@ -18,7 +18,7 @@ import string
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import AsyncGenerator, Generator, Optional
+from typing import AsyncGenerator, Generator
 
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
@@ -61,8 +61,8 @@ class ChaosLevel(str, Enum):
     """Chaos engineering injection levels."""
     NONE = "none"
     LOW = "low"       # 10% chance of OOD injection
-    MEDIUM = "medium" # 30% chance
-    HIGH = "high"     # 60% chance
+    MEDIUM = "medium"  # 30% chance
+    HIGH = "high"    # 60% chance
     EXTREME = "extreme"  # 100% — every log is OOD
 
 
@@ -126,8 +126,8 @@ def _random_error_message() -> str:
         resource=random.choice(["/secrets/prod", "/deploy/k8s", "/artifacts/build"]),
         mem=random.randint(8000, 32000),
         pkg=random.choice(["numpy", "lodash", "spring-boot", "tokio"]),
-        ver=f"{random.randint(1,5)}.{random.randint(0,20)}.{random.randint(0,9)}",
-        cve=f"2026-{random.randint(10000,99999)}",
+        ver=f"{random.randint(1, 5)}.{random.randint(0, 20)}.{random.randint(0, 9)}",
+        cve=f"2026-{random.randint(10000, 99999)}",
         var=random.choice(["DATABASE_URL", "API_KEY", "SECRET_TOKEN"]),
         env=random.choice(["production", "staging", "ci"]),
     )

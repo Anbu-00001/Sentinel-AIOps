@@ -593,7 +593,7 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
                 top_features=top_features,
             )
             session.add(entry)
-            
+
     try:
         await run_in_threadpool(_save_webhook)
         log.info(

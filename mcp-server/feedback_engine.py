@@ -15,7 +15,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, field_validator

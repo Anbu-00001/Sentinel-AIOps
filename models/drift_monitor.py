@@ -22,7 +22,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-import joblib
+
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -105,10 +105,21 @@ def compute_psi(
     ref_counts, _ = np.histogram(reference, bins=bins)
     cur_counts, _ = np.histogram(current, bins=bins)
 
-    # Normalize to proportions (add epsilon to avoid log(0))
-    eps: float = 0.0001
-    ref_pct = (ref_counts + eps) / (ref_counts.sum() + eps * n_bins)
-    cur_pct = (cur_counts + eps) / (cur_counts.sum() + eps * n_bins)
+    # ── Epsilon Smoothing ──
+    # Epsilon Smoothing prevents mathematical asymptotes during OOD data injection.
+    EPSILON: float = 1e-4
+
+    # Calculate raw proportions
+    ref_pct = ref_counts / ref_counts.sum()
+    cur_pct = cur_counts / cur_counts.sum()
+
+    # Apply smoothing: value = max(value, EPSILON)
+    ref_pct = np.maximum(ref_pct, EPSILON)
+    cur_pct = np.maximum(cur_pct, EPSILON)
+
+    # Re-normalize so they sum to 1.0
+    ref_pct /= ref_pct.sum()
+    cur_pct /= cur_pct.sum()
 
     psi: float = float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
     return psi

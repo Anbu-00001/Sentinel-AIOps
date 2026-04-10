@@ -22,7 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+
 from scipy.sparse import load_npz
 from sklearn.metrics import classification_report
 from sklearn.model_selection import StratifiedShuffleSplit
