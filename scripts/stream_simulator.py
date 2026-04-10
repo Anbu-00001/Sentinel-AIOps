@@ -22,6 +22,13 @@ from typing import AsyncGenerator, Generator
 
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
+import joblib
+import os
+import sys
+import numpy as np
+
+# Allow imports from project root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -43,18 +50,40 @@ FAILURE_TYPES: list[str] = [
 ]
 SEVERITIES: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-# Normal ranges (from training data)
-NORMAL_RANGES: dict[str, tuple[float, float]] = {
-    "build_duration_sec": (10, 3600),
-    "test_duration_sec": (5, 600),
-    "deploy_duration_sec": (5, 300),
-    "cpu_usage_pct": (5.0, 100.0),
-    "memory_usage_mb": (256, 16384),
-    "retry_count": (0, 5),
-}
+# ── Dynamic Normalization Lookup ──────────────────────────────────────────────
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(ROOT, "models")
+
+try:
+    log.info("Reasoning: Synchronizing simulator ranges with training artifacts.")
+    _scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
+    # Assuming column order: build, test, deploy, cpu, mem, retry
+    _means = _scaler.mean_
+    _stds = np.sqrt(_scaler.var_) if hasattr(_scaler, "var_") else [10.0] * 6
+    
+    NORMAL_RANGES: dict[str, tuple[float, float]] = {
+        "build_duration_sec": (max(10, _means[0] - 2*_stds[0]), _means[0] + 2*_stds[0]),
+        "test_duration_sec": (max(5, _means[1] - 2*_stds[1]), _means[1] + 2*_stds[1]),
+        "deploy_duration_sec": (max(5, _means[2] - 2*_stds[2]), _means[2] + 2*_stds[2]),
+        "cpu_usage_pct": (max(0, _means[3] - 2*_stds[3]), min(100, _means[3] + 2*_stds[3])),
+        "memory_usage_mb": (max(256, _means[4] - 2*_stds[4]), _means[4] + 2*_stds[4]),
+        "retry_count": (max(0, _means[5] - 2*_stds[5]), _means[5] + 2*_stds[5]),
+    }
+    log.info("Simulator synchronized with scaler: %s", NORMAL_RANGES)
+except Exception as exc:
+    log.warning("Failed to load scaler for simulation: %s. Using fallback ranges.", exc)
+    NORMAL_RANGES: dict[str, tuple[float, float]] = {
+        "build_duration_sec": (10, 3600),
+        "test_duration_sec": (5, 600),
+        "deploy_duration_sec": (5, 300),
+        "cpu_usage_pct": (5.0, 100.0),
+        "memory_usage_mb": (256, 16384),
+        "retry_count": (0, 5),
+    }
 
 # Chaos multipliers (5x above training max)
 CHAOS_MULTIPLIER: float = 5.0
+import numpy as np
 
 
 class ChaosLevel(str, Enum):

@@ -208,7 +208,7 @@ def build_feature_matrix(
     return X, scaler, hasher, tfidf
 
 
-def save_artifacts(scaler, hasher, tfidf, column_order: list):
+def save_artifacts(scaler, hasher, tfidf, column_order: list, total_features: int):
     """Persist fitted transformers and column metadata to /models/."""
     log.info("Reasoning: Saving fitted transformers as joblib artifacts.")
     joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler.joblib"))
@@ -224,6 +224,8 @@ def save_artifacts(scaler, hasher, tfidf, column_order: list):
         "hash_n_features": HASH_N_FEATURES,
         "tfidf_max_features": TFIDF_MAX_FEATURES,
         "dummy_column_order": column_order,
+        "total_features": total_features,
+        "artifacts_timestamp": datetime.now().isoformat(),
     }
     meta_path = os.path.join(MODELS_DIR, "feature_meta.json")
     with open(meta_path, "w") as f:
@@ -253,7 +255,7 @@ def main():
     save_npz(matrix_path, X)
     log.info("Feature matrix saved to %s", matrix_path)
 
-    save_artifacts(scaler, hasher, tfidf, column_order)
+    save_artifacts(scaler, hasher, tfidf, column_order, X.shape[1])
     log.info("=== Preprocessing complete. ===")
 
 

@@ -24,6 +24,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.concurrency import run_in_threadpool
+import joblib
 
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,6 +35,10 @@ from config import PSI_SEVERE_THRESHOLD, PSI_MODERATE_THRESHOLD, RETRAIN_THRESHO
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("sentinel.dashboard")
 
+# ── Import Decoupled ML Logic ───────────────────────────────────────────────
+from mcp_server.logic import validate_input, run_prediction  # noqa: E402
+
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(ROOT, "models")
@@ -42,6 +47,41 @@ FEEDBACK_FILE = os.path.join(ROOT, "data", "feedback", "human_labels.json")
 # ── Initialize database ──────────────────────────────────────────────────────
 log.info("Reasoning: Initializing SQLite database for dashboard queries.")
 init_db()
+
+# ── Load Mathematical Artifacts ──────────────────────────────────────────────
+log.info("Reasoning: Loading model artifacts for mathematical synchronization & inline inference.")
+try:
+    _scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
+    _model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
+    _le = joblib.load(os.path.join(MODELS_DIR, "label_encoder.joblib"))
+    _hasher = joblib.load(os.path.join(MODELS_DIR, "hasher.joblib"))
+    _tfidf = joblib.load(os.path.join(MODELS_DIR, "tfidf.joblib"))
+    
+    with open(os.path.join(MODELS_DIR, "feature_meta.json")) as f:
+        _meta = json.load(f)
+        
+    _feature_names = (
+        _meta["numerical_cols"] + 
+        [f"hash_{i}" for i in range(_meta["hash_n_features"])] +
+        [f"tfidf_{i}" for i in range(_meta["tfidf_max_features"])] +
+        _meta["dummy_column_order"] + _meta["bool_cols"]
+    )
+    
+    # Derive dynamic baselines from fitted scaler means
+    _BASELINE_MEANS = {
+        col: float(_scaler.mean_[i]) 
+        for i, col in enumerate(_meta["numerical_cols"])
+    }
+    _INFERENCE_READY = True
+    log.info("Dashboard Artifacts Loaded. Feature Dimension: %d", len(_feature_names))
+except Exception as exc:
+    log.warning("Failed to load artifacts for synchronization: %s. Using safe defaults.", exc)
+    _INFERENCE_READY = False
+    _BASELINE_MEANS = {
+        "build_duration_sec": 1800.0, "test_duration_sec": 300.0,
+        "deploy_duration_sec": 150.0, "cpu_usage_pct": 50.0,
+        "memory_usage_mb": 8192.0, "retry_count": 2.5
+    }
 
 # ── Pydantic Models ──────────────────────────────────────────────────────────
 
@@ -226,7 +266,7 @@ def _build_heatmap(drift_report: Optional[dict]) -> list[DriftHeatmapEntry]:
     ]
 
 
-# Key numeric features we track for live drift
+# ── Dynamic Drift Configuration ──────────────────────────────────────────────
 _DRIFT_FEATURES = [
     "build_duration_sec",
     "test_duration_sec",
@@ -236,15 +276,8 @@ _DRIFT_FEATURES = [
     "retry_count",
 ]
 
-# Approximate training-time baseline means (used for PSI approximation)
-_BASELINE_MEANS: dict[str, float] = {
-    "build_duration_sec": 120.0,
-    "test_duration_sec": 60.0,
-    "deploy_duration_sec": 30.0,
-    "cpu_usage_pct": 50.0,
-    "memory_usage_mb": 2048.0,
-    "retry_count": 0.5,
-}
+# Epsilon Smoothing prevents mathematical asymptotes in drift deviation
+EPSILON = 1e-4
 
 
 def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
@@ -288,8 +321,8 @@ def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
             continue
         live_mean = sum(vals) / len(vals)
         baseline = _BASELINE_MEANS.get(feat, 1.0)
-        # Normalised absolute deviation scaled to [0, 1]
-        psi_score = abs(live_mean - baseline) / (baseline + 1e-9)
+        # Normalised absolute deviation with Epsilon Smoothing
+        psi_score = abs(live_mean - baseline) / (baseline + EPSILON)
         psi_score = round(min(psi_score, 1.0), 4)
 
         if psi_score >= PSI_SEVERE_THRESHOLD:
@@ -567,18 +600,23 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
     top_features: list = []
     result: dict
 
-    try:
-        from importlib import import_module
-        server_mod = import_module("mcp_server.server")
-        result = server_mod.analyze_log(features)
-        prediction = result.get("prediction", "pending")
-        confidence = result.get("confidence", 0.0)
-        top_features = result.get("top_contributing_features", [])
-    except Exception:
-        # MCP server runs in a separate process — store payload for later
+    if _INFERENCE_READY:
+        try:
+            res = run_prediction(
+                features, _model, _le, _scaler, _hasher, _tfidf, _meta, _feature_names
+            )
+            prediction = res["prediction"]
+            confidence = res["confidence"]
+            top_features = res["top_features"]
+            result = {"status": "success", "prediction": prediction}
+        except Exception as exc:
+            log.error("Inference execution failed: %s", exc)
+            result = {"status": "error", "message": str(exc)}
+    else:
+        # Artifacts not loaded — store payload for later
         result = {
             "status": "queued",
-            "message": "Payload stored for next inference cycle.",
+            "message": "Payload stored for next inference cycle (artifacts not loaded).",
         }
 
     # ── Always persist to DB with event_source tag ────────────────────

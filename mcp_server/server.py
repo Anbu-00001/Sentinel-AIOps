@@ -35,11 +35,8 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
-from scipy.sparse import csr_matrix, hstack
-
-# Allow imports from project root
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import LogEntry, get_session, init_db  # noqa: E402
+from .logic import REQUIRED_KEYS, OPTIONAL_KEYS, validate_input, run_prediction
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -94,30 +91,8 @@ def _refresh_drift_metric() -> None:
             pass
 
 
-# ── Schema — required and optional feature keys ──────────────────────────────
-REQUIRED_KEYS: list[str] = [
-    "build_duration_sec",
-    "test_duration_sec",
-    "deploy_duration_sec",
-    "cpu_usage_pct",
-    "memory_usage_mb",
-    "retry_count",
-    "error_message",
-]
+# ── Removed redundant local schema definitions — now in logic.py ─────────────
 
-OPTIONAL_KEYS: dict[str, Any] = {
-    "repository": "",
-    "author": "",
-    "failure_stage": "build",
-    "severity": "MEDIUM",
-    "ci_tool": "Jenkins",
-    "language": "Python",
-    "os": "Linux",
-    "cloud_provider": "AWS",
-    "is_flaky_test": False,
-    "rollback_triggered": False,
-    "incident_created": False,
-}
 
 # ── Load artifacts at startup ─────────────────────────────────────────────────
 log.info(
@@ -167,78 +142,8 @@ mcp = FastMCP(
 )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Removed redundant local transforms — now in logic.py ──────────────────
 
-def _validate_input(features: Dict[str, Any]) -> list[str]:
-    """Validate required keys are present."""
-    errors: list[str] = []
-    for key in REQUIRED_KEYS:
-        if key not in features:
-            errors.append(f"Missing required field: '{key}'")
-    for key in [
-        "build_duration_sec", "test_duration_sec",
-        "deploy_duration_sec", "cpu_usage_pct",
-        "memory_usage_mb", "retry_count",
-    ]:
-        if key in features:
-            try:
-                float(features[key])
-            except (ValueError, TypeError):
-                errors.append(
-                    f"Field '{key}' must be numeric, "
-                    f"got: {type(features[key]).__name__}"
-                )
-    return errors
-
-
-def _transform_input(features: Dict[str, Any]):
-    """Apply the 4-group transformation pipeline."""
-    for key, default in OPTIONAL_KEYS.items():
-        if key not in features:
-            features[key] = default
-
-    df = pd.DataFrame([features])
-
-    X_num = csr_matrix(
-        _scaler.transform(df[_meta["numerical_cols"]].astype(float))
-    )
-    hash_input = (
-        df[_meta["high_card_cols"]].astype(str).to_dict(orient="records")
-    )
-    X_hash = _hasher.transform(hash_input)
-    X_text = _tfidf.transform(
-        df[_meta["text_col"]].fillna("").astype(str)
-    )
-    df_dummies = pd.get_dummies(df[_meta["low_card_cols"]], drop_first=True)
-    df_dummies = df_dummies.reindex(
-        columns=_meta["dummy_column_order"], fill_value=0
-    )
-    bool_data = df[_meta["bool_cols"]].astype(int)
-    X_extra = csr_matrix(
-        pd.concat([df_dummies, bool_data], axis=1).astype(float).values
-    )
-
-    return hstack([X_num, X_hash, X_text, X_extra], format="csr")
-
-
-def _get_top_features(X_row, n: int = 5) -> list[dict[str, Any]]:
-    """Return top-N contributing feature names by absolute value."""
-    if hasattr(X_row, "toarray"):
-        arr = np.abs(X_row.toarray().flatten())
-    else:
-        arr = np.abs(X_row.flatten())
-    top_idx = np.argsort(arr)[-n:][::-1]
-    results: list[dict[str, Any]] = []
-    for idx in top_idx:
-        name = (
-            _feature_names[idx]
-            if idx < len(_feature_names)
-            else f"f_{idx}"
-        )
-        results.append(
-            {"feature": name, "value": round(float(arr[idx]), 4)}
-        )
-    return results
 
 
 def get_prometheus_metrics() -> str:
@@ -267,27 +172,24 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
     start_time = time.perf_counter()
 
     # ── Validate ──────────────────────────────────────────────────────────
-    errors = _validate_input(features)
+    errors = validate_input(features)
     if errors:
         INFERENCE_ERRORS.inc()
         log.warning("Schema validation failed: %s", errors)
         return {"error": "Schema validation failed", "details": errors}
 
-    # ── Transform ─────────────────────────────────────────────────────────
+    # ── Predict ───────────────────────────────────────────────────────────
     try:
-        X = _transform_input(features)
+        res = run_prediction(
+            features, _model, _le, _scaler, _hasher, _tfidf, _meta, _feature_names
+        )
+        prediction = res["prediction"]
+        confidence = res["confidence"]
+        top_features = res["top_features"]
     except Exception as exc:
         INFERENCE_ERRORS.inc()
-        log.error("Transform failed: %s", exc)
-        return {"error": "Feature transformation failed", "details": [str(exc)]}
-
-    # ── Predict ───────────────────────────────────────────────────────────
-    proba = _model.predict_proba(X)[0]
-    pred_idx = int(np.argmax(proba))
-    confidence = float(proba[pred_idx])
-    prediction: str = _le.inverse_transform([pred_idx])[0]
-
-    top_features = _get_top_features(X, n=5)
+        log.error("Inference failed: %s", exc)
+        return {"error": "Inference execution failed", "details": [str(exc)]}
 
     # ── Prometheus tracking ───────────────────────────────────────────────
     latency = time.perf_counter() - start_time
