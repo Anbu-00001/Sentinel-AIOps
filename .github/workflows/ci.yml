@@ -47,11 +47,12 @@ jobs:
                       prometheus_client pydantic mcp pytest \
                       sqlalchemy httpx fastapi uvicorn httpx
 
-      - name: Download dataset & train model
+      - name: Preprocess Synthetic Data & Train Model
+        env:
+          CI: true
         run: |
-          pip install kaggle
           mkdir -p data/raw
-          # Training artifacts must exist for tests to pass
+          # Preprocessing will fall back to synthetic data generation
           python models/preprocess.py
           python models/train_v2.py
 

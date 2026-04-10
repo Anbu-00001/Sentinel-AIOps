@@ -12,6 +12,7 @@ Workflow Rules (AGENTS.md):
 
 import logging
 import os
+from datetime import datetime, timedelta
 
 import json
 
@@ -65,10 +66,73 @@ HASH_N_FEATURES = 64   # bits for FeatureHasher (power-of-2 preferred)
 TFIDF_MAX_FEATURES = 500
 
 
+def generate_synthetic_baseline(num_samples: int = 1000) -> pd.DataFrame:
+    """
+    Generate mathematically sound synthetic data matching our schema.
+    Used as fallback for CI/CD environments where raw Kaggle data is missing.
+    """
+    log.info("Reasoning: Generating %d synthetic baseline records for CI validation.", num_samples)
+    
+    ci_tools = ["Jenkins", "GitHub Actions", "GitLab CI", "CircleCI", "Travis CI"]
+    languages = ["Python", "Java", "JavaScript", "Go", "Rust", "C++"]
+    os_list = ["Linux", "Windows", "macOS"]
+    cloud_providers = ["AWS", "GCP", "Azure", "On-Premise"]
+    stages = ["build", "test", "deploy"]
+    severities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    failure_types = [
+        "Build Failure", "Configuration Error", "Dependency Error",
+        "Deployment Failure", "Network Error", "Permission Error",
+        "Resource Exhaustion", "Security Scan Failure", "Test Failure", "Timeout"
+    ]
+
+    data = {
+        "pipeline_id": [f"pipe-{i % 100}" for i in range(num_samples)],
+        "run_id": [f"run-{i}" for i in range(num_samples)],
+        "timestamp": [(datetime.now() - timedelta(minutes=i)).isoformat() for i in range(num_samples)],
+        "ci_tool": np.random.choice(ci_tools, num_samples),
+        "repository": [f"repo-{np.random.randint(0, 50)}" for _ in range(num_samples)],
+        "branch": np.random.choice(["main", "develop", "feature", "hotfix"], num_samples),
+        "commit_hash": [f"hash-{i}" for i in range(num_samples)],
+        "author": [f"dev-{np.random.randint(0, 100)}" for _ in range(num_samples)],
+        "language": np.random.choice(languages, num_samples),
+        "os": np.random.choice(os_list, num_samples),
+        "cloud_provider": np.random.choice(cloud_providers, num_samples),
+        
+        # Gaussian / Normal distributions for numerical features
+        "build_duration_sec": np.random.normal(1800, 500, num_samples).clip(10, 3600).astype(int),
+        "test_duration_sec": np.random.normal(300, 100, num_samples).clip(5, 600).astype(int),
+        "deploy_duration_sec": np.random.normal(150, 50, num_samples).clip(5, 300).astype(int),
+        "cpu_usage_pct": np.random.normal(50, 15, num_samples).clip(0, 100),
+        "memory_usage_mb": np.random.normal(8192, 2048, num_samples).clip(256, 16384).astype(int),
+        "retry_count": np.random.randint(0, 6, num_samples),
+        
+        "failure_stage": np.random.choice(stages, num_samples),
+        "failure_type": np.random.choice(failure_types, num_samples),
+        "error_code": [f"ERR_{np.random.randint(100, 999)}" for _ in range(num_samples)],
+        "error_message": ["Synthetic validation log entry" for _ in range(num_samples)],
+        "severity": np.random.choice(severities, num_samples),
+        "is_flaky_test": np.random.choice([True, False], num_samples),
+        "rollback_triggered": np.random.choice([True, False], num_samples),
+        "incident_created": np.random.choice([True, False], num_samples),
+    }
+    
+    return pd.DataFrame(data)
+
+
 def load_raw(path: str) -> pd.DataFrame:
-    """Load the raw CSV and perform minimal sanity checks."""
-    log.info("Reasoning: Loading raw dataset from %s", path)
-    df = pd.read_csv(path)
+    """Load the raw CSV or fall back to synthetic data in CI."""
+    try:
+        log.info("Reasoning: Loading raw dataset from %s", path)
+        df = pd.read_csv(path)
+    except FileNotFoundError:
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            log.warning("WARNING: Raw dataset not found. CI Environment detected. "
+                        "Falling back to Synthetic Data Generation for pipeline validation.")
+            return generate_synthetic_baseline(num_samples=1000)
+        else:
+            log.error("CRITICAL: Local dataset missing and non-CI environment detected.")
+            raise
+
     log.info("Loaded %d rows × %d columns.", df.shape[0], df.shape[1])
     assert df[NUMERICAL_COLS].isnull().sum().sum() == 0, "Unexpected nulls in numerical cols"
     assert TEXT_COL in df.columns, f"Expected column '{TEXT_COL}' not found"
