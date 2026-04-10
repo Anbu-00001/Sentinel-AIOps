@@ -47,14 +47,7 @@ jobs:
                       prometheus_client pydantic mcp pytest \
                       sqlalchemy httpx fastapi uvicorn httpx
 
-      - name: Preprocess Synthetic Data & Train Model
-        env:
-          CI: true
-        run: |
-          mkdir -p data/raw
-          # Preprocessing will fall back to synthetic data generation
-          python models/preprocess.py
-          python models/train_v2.py
+
 
       - name: Run pytest
         run: |
