@@ -97,7 +97,7 @@ class TestModelArtifacts:
         # Since feature_meta.json is tracked in git, we don't mock it unless it's missing
         if not os.path.exists(path):
             pytest.skip("feature_meta.json missing")
-            
+
         with open(path) as f:
             meta = json.load(f)
         required = [
@@ -119,7 +119,7 @@ class TestModelArtifacts:
         """metrics.json exists with expected keys (Mocked)."""
         mock_exists.return_value = True
         path = os.path.join(MODELS_DIR, "metrics.json")
-        
+
         # We mock the open/json.load if we want to test content without file
         with patch("builtins.open", MagicMock()):
             with patch("json.load") as mock_json:
@@ -134,19 +134,19 @@ class TestModelArtifacts:
     def test_model_predict_shape(self, mock_load_npz, mock_exists, mock_load) -> None:
         """Model produces correct output shape (Mocked)."""
         mock_exists.return_value = True
-        
+
         # Mock sparse matrix
         mock_X = MagicMock()
         mock_X.shape = (100, 150)
-        mock_X.__getitem__.return_value = mock_X # For X[:5]
+        mock_X.__getitem__.return_value = mock_X  # For X[:5]
         mock_load_npz.return_value = mock_X
-        
+
         # Mock model
         mock_model = MagicMock()
         mock_model.predict.return_value = np.zeros(5)
         mock_model.predict_proba.return_value = np.zeros((5, 10))
         mock_load.return_value = mock_model
-        
+
         model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
         preds = model.predict(mock_X[:5])
         assert len(preds) == 5
