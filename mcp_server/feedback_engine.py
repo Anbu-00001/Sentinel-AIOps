@@ -20,11 +20,13 @@ from typing import Any, Dict
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, field_validator
 
-# ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# ── Logging ─────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("sentinel.feedback")
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths ───────────────────────────────────────────────────────────────
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEEDBACK_DIR = os.path.join(ROOT, "data", "feedback")
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "human_labels.json")
@@ -32,7 +34,7 @@ FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "human_labels.json")
 # ── Thread lock for file-safe writes ─────────────────────────────────────────
 _write_lock = threading.Lock()
 
-# ── Valid failure types (AGENTS.md + data_summary.json) ───────────────────────
+# ── Valid failure types (AGENTS.md + data_summary.json) ─────────────────
 VALID_LABELS: set[str] = {
     "Build Failure", "Configuration Error", "Dependency Error",
     "Deployment Failure", "Network Error", "Permission Error",
@@ -91,7 +93,7 @@ class FeedbackError(BaseModel):
     details: list[str]
 
 
-# ── Core logic ────────────────────────────────────────────────────────────────
+# ── Core logic ──────────────────────────────────────────────────────────
 
 def _ensure_feedback_dir() -> None:
     """Create feedback directory and file if they don't exist."""
@@ -170,8 +172,10 @@ def submit_ground_truth(
     On success: {"status": "accepted", "message": ..., "record_count": N}
     On error:   {"error": "Validation failed", "details": [...]}
     """
-    log.info("Reasoning: Received ground-truth submission (log_id=%s, author=%s).",
-             log_id, author_id)
+    log.info(
+        "Reasoning: Received ground-truth submission (log_id=%s, author=%s).",
+        log_id,
+        author_id)
 
     try:
         record = FeedbackRecord(
@@ -221,12 +225,14 @@ def get_feedback_stats() -> Dict[str, Any]:
     return {
         "total_records": len(records),
         "unique_authors": len(authors),
-        "correction_rate": round(mismatches / len(records), 4) if records else 0,
+        "correction_rate": round(
+            mismatches / len(records),
+            4) if records else 0,
         "label_distribution": label_dist,
     }
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     log.info("Starting Sentinel-AIOps Feedback Engine (stdio transport).")
     mcp.run(transport="stdio")

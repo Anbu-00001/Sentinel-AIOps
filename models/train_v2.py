@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import joblib
 import lightgbm as lgb
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -93,7 +94,10 @@ def encode_labels(labels):
 
 def stratified_split(X, y, test_size=0.20):
     """80/20 stratified split maintaining class balance."""
-    log.info("Reasoning: StratifiedShuffleSplit with test_size=%.2f to preserve class ratios.", test_size)
+    log.info(
+        "Reasoning: StratifiedShuffleSplit with test_size=%.2f to preserve class ratios.",
+        test_size,
+    )
     sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=42)
     train_idx, test_idx = next(sss.split(X, y))
     return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
@@ -101,13 +105,17 @@ def stratified_split(X, y, test_size=0.20):
 
 def train_lgbm(X_train, y_train, X_test, y_test, feature_names):
     """Train a LightGBM classifier (fixed rounds, no early stopping)."""
-    log.info("Reasoning: Training LightGBM (objective=multiclass, n_estimators=%d, lr=%.3f). "
-             "No early stopping — synthetic dataset has low feature-label signal.",
-             LGBM_PARAMS["n_estimators"], LGBM_PARAMS["learning_rate"])
+    log.info(
+        "Reasoning: Training LightGBM (objective=multiclass, n_estimators=%d, lr=%.3f). "
+        "No early stopping — synthetic dataset has low feature-label signal.",
+        LGBM_PARAMS["n_estimators"],
+        LGBM_PARAMS["learning_rate"],
+    )
 
     model = lgb.LGBMClassifier(**LGBM_PARAMS)
     model.fit(
-        X_train, y_train,
+        X_train,
+        y_train,
         eval_set=[(X_test, y_test)],
         feature_name=feature_names,
         callbacks=[
@@ -120,10 +128,13 @@ def train_lgbm(X_train, y_train, X_test, y_test, feature_names):
 
 def generate_report(model, X_test, y_test, le):
     """Generate per-class classification report and save as JSON artifact."""
-    log.info("Reasoning: Generating classification report (precision, recall, F1 per class).")
+    log.info(
+        "Reasoning: Generating classification report (precision, recall, F1 per class)."
+    )
     y_pred = model.predict(X_test)
     report = classification_report(
-        y_test, y_pred,
+        y_test,
+        y_pred,
         target_names=list(le.classes_),
         output_dict=True,
         zero_division=0,
@@ -138,18 +149,31 @@ def generate_report(model, X_test, y_test, le):
     log.info("─── Per-Class Results ───")
     for cls in le.classes_:
         m = report[cls]
-        log.info("  %-25s  P=%.4f  R=%.4f  F1=%.4f  n=%d",
-                 cls, m["precision"], m["recall"], m["f1-score"], int(m["support"]))
+        log.info(
+            "  %-25s  P=%.4f  R=%.4f  F1=%.4f  n=%d",
+            cls,
+            m["precision"],
+            m["recall"],
+            m["f1-score"],
+            int(m["support"]),
+        )
     macro = report["macro avg"]
-    log.info("  %-25s  P=%.4f  R=%.4f  F1=%.4f",
-             "MACRO AVG", macro["precision"], macro["recall"], macro["f1-score"])
+    log.info(
+        "  %-25s  P=%.4f  R=%.4f  F1=%.4f",
+        "MACRO AVG",
+        macro["precision"],
+        macro["recall"],
+        macro["f1-score"],
+    )
 
     return report
 
 
 def plot_feature_importance(model, top_n=30):
     """Plot native LightGBM feature importance ('gain') and save PNG."""
-    log.info("Reasoning: Generating feature_importance.png using LightGBM native gain-based importance.")
+    log.info(
+        "Reasoning: Generating feature_importance.png using LightGBM native gain-based importance."
+    )
     importance = model.feature_importances_
     feature_names = [f"f_{i}" for i in range(len(importance))]
 
@@ -180,7 +204,7 @@ def plot_feature_importance(model, top_n=30):
     while len(readable) < len(importance):
         readable.append(f"f_{len(readable)}")
 
-    feature_names = readable[:len(importance)]
+    feature_names = readable[: len(importance)]
 
     # Select top-N
     top_idx = np.argsort(importance)[-top_n:]
@@ -189,12 +213,17 @@ def plot_feature_importance(model, top_n=30):
 
     fig, ax = plt.subplots(figsize=(10, 8))
     colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(top_vals)))
-    ax.barh(range(len(top_vals)), top_vals, color=colors, edgecolor="white", linewidth=0.5)
+    ax.barh(
+        range(len(top_vals)), top_vals, color=colors, edgecolor="white", linewidth=0.5
+    )
     ax.set_yticks(range(len(top_vals)))
     ax.set_yticklabels(top_names, fontsize=9)
     ax.set_xlabel("Feature Importance (Gain)", fontsize=12)
-    ax.set_title("Top-30 Feature Importance — Sentinel-AIOps LightGBM v2",
-                 fontsize=13, fontweight="bold")
+    ax.set_title(
+        "Top-30 Feature Importance — Sentinel-AIOps LightGBM v2",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.grid(axis="x", alpha=0.3)
     fig.tight_layout()
 
@@ -236,7 +265,9 @@ def update_registry(report, model):
 
     with open(reg_path, "w") as f:
         json.dump(registry, f, indent=2)
-    log.info("Registry updated → %s (F1=%.4f)", entry["model_version"], macro["f1-score"])
+    log.info(
+        "Registry updated → %s (F1=%.4f)", entry["model_version"], macro["f1-score"]
+    )
 
 
 def main():
@@ -253,8 +284,12 @@ def main():
     feature_names = feature_names[:n_feats]
 
     X_train, X_test, y_train, y_test = stratified_split(X, y)
-    log.info("Train: %d samples | Test: %d samples | Features: %d",
-             X_train.shape[0], X_test.shape[0], n_feats)
+    log.info(
+        "Train: %d samples | Test: %d samples | Features: %d",
+        X_train.shape[0],
+        X_test.shape[0],
+        n_feats,
+    )
 
     model = train_lgbm(X_train, y_train, X_test, y_test, feature_names)
 

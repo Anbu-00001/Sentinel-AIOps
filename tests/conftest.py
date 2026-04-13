@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
+
 @pytest.fixture
 def synthetic_dataframe():
     """
@@ -19,32 +20,50 @@ def synthetic_dataframe():
     stages = ["build", "test", "deploy"]
     severities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
     failure_types = [
-        "Build Failure", "Configuration Error", "Dependency Error",
-        "Deployment Failure", "Network Error", "Permission Error",
-        "Resource Exhaustion", "Security Scan Failure", "Test Failure", "Timeout"
+        "Build Failure",
+        "Configuration Error",
+        "Dependency Error",
+        "Deployment Failure",
+        "Network Error",
+        "Permission Error",
+        "Resource Exhaustion",
+        "Security Scan Failure",
+        "Test Failure",
+        "Timeout",
     ]
 
     data = {
         "pipeline_id": [f"pipe-{i % 10}" for i in range(num_samples)],
         "run_id": [f"run-{i}" for i in range(num_samples)],
-        "timestamp": [(datetime(2026, 1, 1) + timedelta(minutes=i)).isoformat() for i in range(num_samples)],
+        "timestamp": [
+            (datetime(2026, 1, 1) + timedelta(minutes=i)).isoformat()
+            for i in range(num_samples)
+        ],
         "ci_tool": np.random.choice(ci_tools, num_samples),
         "repository": [f"repo-{i % 5}" for i in range(num_samples)],
-        "branch": np.random.choice(["main", "develop", "feature", "hotfix"], num_samples),
+        "branch": np.random.choice(
+            ["main", "develop", "feature", "hotfix"], num_samples
+        ),
         "commit_hash": [f"hash-{i}" for i in range(num_samples)],
         "author": [f"dev-{i % 10}" for i in range(num_samples)],
         "language": np.random.choice(languages, num_samples),
         "os": np.random.choice(os_list, num_samples),
         "cloud_provider": np.random.choice(cloud_providers, num_samples),
-        
         # Mathematical Distributions
-        "build_duration_sec": np.random.normal(1800, 500, num_samples).clip(10, 3600).astype(int),
-        "test_duration_sec": np.random.normal(300, 100, num_samples).clip(5, 600).astype(int),
-        "deploy_duration_sec": np.random.normal(150, 50, num_samples).clip(5, 300).astype(int),
+        "build_duration_sec": np.random.normal(1800, 500, num_samples)
+        .clip(10, 3600)
+        .astype(int),
+        "test_duration_sec": np.random.normal(300, 100, num_samples)
+        .clip(5, 600)
+        .astype(int),
+        "deploy_duration_sec": np.random.normal(150, 50, num_samples)
+        .clip(5, 300)
+        .astype(int),
         "cpu_usage_pct": np.random.normal(50, 15, num_samples).clip(0, 100),
-        "memory_usage_mb": np.random.normal(8192, 2048, num_samples).clip(256, 16384).astype(int),
+        "memory_usage_mb": np.random.normal(8192, 2048, num_samples)
+        .clip(256, 16384)
+        .astype(int),
         "retry_count": np.random.randint(0, 6, num_samples),
-        
         "failure_stage": np.random.choice(stages, num_samples),
         "failure_type": np.random.choice(failure_types, num_samples),
         "error_code": [f"ERR_{i}" for i in range(num_samples)],
@@ -54,5 +73,5 @@ def synthetic_dataframe():
         "rollback_triggered": np.random.choice([True, False], num_samples),
         "incident_created": np.random.choice([True, False], num_samples),
     }
-    
+
     return pd.DataFrame(data)

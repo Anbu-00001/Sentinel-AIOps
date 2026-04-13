@@ -32,35 +32,33 @@ class TestModelArtifacts:
         """Label encoder loads and has 10 classes."""
         path = os.path.join(MODELS_DIR, "label_encoder.joblib")
         le = joblib.load(path)
-        assert len(le.classes_) == 10, (
-            f"Expected 10 classes, got {len(le.classes_)}"
-        )
+        assert len(le.classes_) == 10, f"Expected 10 classes, got {len(le.classes_)}"
 
     def test_scaler_loads(self) -> None:
         """StandardScaler loads with correct feature count."""
         path = os.path.join(MODELS_DIR, "scaler.joblib")
         scaler = joblib.load(path)
         assert hasattr(scaler, "mean_"), "Scaler not fitted"
-        assert len(scaler.mean_) == 6, (
-            f"Expected 6 numerical features, got {len(scaler.mean_)}"
-        )
+        assert (
+            len(scaler.mean_) == 6
+        ), f"Expected 6 numerical features, got {len(scaler.mean_)}"
 
     def test_tfidf_loads(self) -> None:
         """TF-IDF vectorizer loads and has correct max_features."""
         path = os.path.join(MODELS_DIR, "tfidf.joblib")
         tfidf = joblib.load(path)
         assert hasattr(tfidf, "vocabulary_"), "TF-IDF not fitted"
-        assert len(tfidf.vocabulary_) <= 500, (
-            f"Expected max 500 features, got {len(tfidf.vocabulary_)}"
-        )
+        assert (
+            len(tfidf.vocabulary_) <= 500
+        ), f"Expected max 500 features, got {len(tfidf.vocabulary_)}"
 
     def test_hasher_loads(self) -> None:
         """FeatureHasher loads with correct n_features."""
         path = os.path.join(MODELS_DIR, "hasher.joblib")
         hasher = joblib.load(path)
-        assert hasher.n_features == 64, (
-            f"Expected 64 hash features, got {hasher.n_features}"
-        )
+        assert (
+            hasher.n_features == 64
+        ), f"Expected 64 hash features, got {hasher.n_features}"
 
     def test_feature_meta_valid(self) -> None:
         """feature_meta.json contains all required keys."""
@@ -68,9 +66,14 @@ class TestModelArtifacts:
         with open(path) as f:
             meta = json.load(f)
         required = [
-            "numerical_cols", "high_card_cols", "low_card_cols",
-            "bool_cols", "text_col", "label_col",
-            "hash_n_features", "tfidf_max_features",
+            "numerical_cols",
+            "high_card_cols",
+            "low_card_cols",
+            "bool_cols",
+            "text_col",
+            "label_col",
+            "hash_n_features",
+            "tfidf_max_features",
             "dummy_column_order",
         ]
         for key in required:
@@ -87,16 +90,16 @@ class TestModelArtifacts:
     def test_model_predict_shape(self) -> None:
         """Model produces correct output shape on dummy input."""
         from scipy.sparse import load_npz
+
         matrix_path = os.path.join(DATA_DIR, "feature_matrix.npz")
         if not os.path.exists(matrix_path):
             pytest.skip("Feature matrix not found")
         X = load_npz(matrix_path)
-        model = joblib.load(
-            os.path.join(MODELS_DIR, "lgbm_model.joblib")
-        )
+        model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
         preds = model.predict(X[:5])
         assert len(preds) == 5, f"Expected 5 predictions, got {len(preds)}"
         proba = model.predict_proba(X[:5])
-        assert proba.shape == (5, 10), (
-            f"Expected (5, 10) proba shape, got {proba.shape}"
-        )
+        assert proba.shape == (
+            5,
+            10,
+        ), f"Expected (5, 10) proba shape, got {proba.shape}"

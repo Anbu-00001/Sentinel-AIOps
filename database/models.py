@@ -24,6 +24,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
+
     pass
 
 
@@ -65,7 +66,7 @@ class LogEntry(Base):
             "raw_payload": self.raw_payload,
             "prediction": self.prediction,
             "confidence": self.confidence,
-            "confidence_score": self.confidence,   # Phase 10 alias
+            "confidence_score": self.confidence,  # Phase 10 alias
             "top_features": self.top_features,
             "psi_drift_stat": self.psi_drift_stat,
         }

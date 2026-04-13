@@ -51,9 +51,7 @@ class TestGitHubWebhook:
         data = response.json()
         # Should contain either a prediction or a queued status
         assert (
-            "prediction" in data
-            or "status" in data
-            or "error" in data
+            "prediction" in data or "status" in data or "error" in data
         ), f"Unexpected response: {data}"
 
     def test_webhook_valid_check_run(self, client) -> None:

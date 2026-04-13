@@ -22,26 +22,26 @@ from typing import Any, Dict
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field, field_validator
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# ── Logging ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("sentinel.feedback_handler")
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths ───────────────────────────────────────────────────────────────
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEEDBACK_DIR = os.path.join(ROOT, "data", "feedback")
 FEEDBACK_FILE = os.path.join(FEEDBACK_DIR, "labels.json")
 REGISTRY_FILE = os.path.join(ROOT, "models", "registry.json")
 
-# ── Thread lock ───────────────────────────────────────────────────────────────
+# ── Thread lock ─────────────────────────────────────────────────────────
 _write_lock = threading.Lock()
 
-# ── Retrain threshold ─────────────────────────────────────────────────────────
+# ── Retrain threshold ───────────────────────────────────────────────────
 RETRAIN_THRESHOLD: int = 100
 
-# ── Valid labels ──────────────────────────────────────────────────────────────
+# ── Valid labels ────────────────────────────────────────────────────────
 VALID_LABELS: set[str] = {
     "Build Failure", "Configuration Error", "Dependency Error",
     "Deployment Failure", "Network Error", "Permission Error",
@@ -73,7 +73,7 @@ class CorrectionInput(BaseModel):
         return v
 
 
-# ── Core logic ────────────────────────────────────────────────────────────────
+# ── Core logic ──────────────────────────────────────────────────────────
 
 def _ensure_file() -> None:
     """Create feedback dir and file if missing."""

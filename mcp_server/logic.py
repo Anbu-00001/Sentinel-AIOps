@@ -56,12 +56,14 @@ def validate_input(features: Dict[str, Any]) -> list[str]:
                 float(features[key])
             except (ValueError, TypeError):
                 errors.append(
-                    f"Field '{key}' must be numeric, got: {type(features[key]).__name__}"
-                )
+                    f"Field '{key}' must be numeric, got: {
+                        type(
+                            features[key]).__name__}")
     return errors
 
 
-def transform_input(features: Dict[str, Any], scaler, hasher, tfidf, meta: Dict[str, Any]):
+def transform_input(features: Dict[str, Any],
+                    scaler, hasher, tfidf, meta: Dict[str, Any]):
     """Apply the 4-group transformation pipeline (Num, Hash, Text, Extra)."""
     # Fill defaults for optional keys
     feats = dict(features)
@@ -75,18 +77,18 @@ def transform_input(features: Dict[str, Any], scaler, hasher, tfidf, meta: Dict[
     X_num = csr_matrix(
         scaler.transform(df[meta["numerical_cols"]].astype(float))
     )
-    
+
     # 2. High-cardinality hashing
     hash_input = (
         df[meta["high_card_cols"]].astype(str).to_dict(orient="records")
     )
     X_hash = hasher.transform(hash_input)
-    
+
     # 3. Text vectorization (TF-IDF)
     X_text = tfidf.transform(
         df[meta["text_col"]].fillna("").astype(str)
     )
-    
+
     # 4. Low-cardinality dummies + Boolean flags
     df_dummies = pd.get_dummies(df[meta["low_card_cols"]], drop_first=True)
     df_dummies = df_dummies.reindex(
@@ -100,13 +102,14 @@ def transform_input(features: Dict[str, Any], scaler, hasher, tfidf, meta: Dict[
     return hstack([X_num, X_hash, X_text, X_extra], format="csr")
 
 
-def get_top_features(X_row, feature_names: list[str], n: int = 5) -> list[dict[str, Any]]:
+def get_top_features(
+        X_row, feature_names: list[str], n: int = 5) -> list[dict[str, Any]]:
     """Return top-N contributing feature names by absolute value."""
     if hasattr(X_row, "toarray"):
         arr = np.abs(X_row.toarray().flatten())
     else:
         arr = np.abs(X_row.flatten())
-    
+
     top_idx = np.argsort(arr)[-n:][::-1]
     results: list[dict[str, Any]] = []
     for idx in top_idx:
@@ -120,17 +123,27 @@ def get_top_features(X_row, feature_names: list[str], n: int = 5) -> list[dict[s
         )
     return results
 
-def run_prediction(features: Dict[str, Any], model, le, scaler, hasher, tfidf, meta: Dict[str, Any], feature_names: list[str]):
+
+def run_prediction(features: Dict[str,
+                                  Any],
+                   model,
+                   le,
+                   scaler,
+                   hasher,
+                   tfidf,
+                   meta: Dict[str,
+                              Any],
+                   feature_names: list[str]):
     """Execute end-to-end prediction logic."""
     X = transform_input(features, scaler, hasher, tfidf, meta)
-    
+
     proba = model.predict_proba(X)[0]
     pred_idx = int(np.argmax(proba))
     confidence = float(proba[pred_idx])
     prediction: str = le.inverse_transform([pred_idx])[0]
 
     top_feats = get_top_features(X, feature_names, n=5)
-    
+
     return {
         "prediction": prediction,
         "confidence": confidence,

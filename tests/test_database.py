@@ -41,9 +41,7 @@ class TestDatabaseSchema:
         Base.metadata.create_all(bind=engine)
         inspector = inspect(engine)
         tables = inspector.get_table_names()
-        assert "log_entries" in tables, (
-            f"Expected 'log_entries' table, found: {tables}"
-        )
+        assert "log_entries" in tables, f"Expected 'log_entries' table, found: {tables}"
         engine.dispose()
 
     def test_log_entries_columns(self) -> None:
@@ -52,10 +50,15 @@ class TestDatabaseSchema:
         Base.metadata.create_all(bind=engine)
         inspector = inspect(engine)
         columns = {c["name"] for c in inspector.get_columns("log_entries")}
-        expected = {"id", "timestamp", "metrics_payload", "prediction", "confidence", "top_features"}
-        assert expected.issubset(columns), (
-            f"Missing columns: {expected - columns}"
-        )
+        expected = {
+            "id",
+            "timestamp",
+            "metrics_payload",
+            "prediction",
+            "confidence",
+            "top_features",
+        }
+        assert expected.issubset(columns), f"Missing columns: {expected - columns}"
         engine.dispose()
 
 
@@ -106,9 +109,15 @@ class TestLogEntryCRUD:
         result = db_session.query(LogEntry).first()
         d = result.to_dict()
         assert set(d.keys()) == {
-            "id", "timestamp", "metrics_payload",
-            "prediction", "confidence", "confidence_score",
-            "top_features", "event_source", "raw_payload",
+            "id",
+            "timestamp",
+            "metrics_payload",
+            "prediction",
+            "confidence",
+            "confidence_score",
+            "top_features",
+            "event_source",
+            "raw_payload",
             "psi_drift_stat",
         }
         assert d["prediction"] == "Test Failure"
@@ -116,11 +125,13 @@ class TestLogEntryCRUD:
     def test_multiple_inserts(self, db_session) -> None:
         """Multiple entries can be inserted and counted."""
         for i in range(5):
-            db_session.add(LogEntry(
-                metrics_payload={"i": i},
-                prediction=f"type_{i}",
-                confidence=0.1 * (i + 1),
-            ))
+            db_session.add(
+                LogEntry(
+                    metrics_payload={"i": i},
+                    prediction=f"type_{i}",
+                    confidence=0.1 * (i + 1),
+                )
+            )
         db_session.commit()
 
         count = db_session.query(LogEntry).count()
@@ -136,14 +147,12 @@ class TestLogEntryCRUD:
                 prediction=f"type_{i}",
                 confidence=0.5,
             )
-            entry.timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=i)
+            entry.timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(
+                hours=i
+            )
             db_session.add(entry)
         db_session.commit()
 
-        results = (
-            db_session.query(LogEntry)
-            .order_by(LogEntry.timestamp.desc())
-            .all()
-        )
+        results = db_session.query(LogEntry).order_by(LogEntry.timestamp.desc()).all()
         assert results[0].prediction == "type_2"
         assert results[-1].prediction == "type_0"

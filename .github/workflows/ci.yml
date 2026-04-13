@@ -23,7 +23,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          flake8 models/ mcp-server/ scripts/stream_simulator.py dashboard/ database/ tests/ \
+          flake8 models/ mcp_server/ scripts/stream_simulator.py dashboard/ database/ tests/ \
             --max-line-length 120 \
             --extend-ignore E501,W503,E402 \
             --count --statistics

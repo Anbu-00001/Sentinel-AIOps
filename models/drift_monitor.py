@@ -29,7 +29,9 @@ from pydantic import BaseModel, Field
 from scipy.stats import chi2_contingency
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("sentinel.drift")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ DATA_DIR = os.path.join(ROOT, "data")
 
 # ── PSI threshold ─────────────────────────────────────────────────────────────
 import sys
+
 sys.path.insert(0, ROOT)
 from config import PSI_SEVERE_THRESHOLD, PSI_BINS
 
@@ -46,20 +49,30 @@ PSI_THRESHOLD: float = PSI_SEVERE_THRESHOLD
 
 # ── Feature lists (consistent with preprocess.py) ─────────────────────────────
 NUMERICAL_COLS: list[str] = [
-    "build_duration_sec", "test_duration_sec", "deploy_duration_sec",
-    "cpu_usage_pct", "memory_usage_mb", "retry_count",
+    "build_duration_sec",
+    "test_duration_sec",
+    "deploy_duration_sec",
+    "cpu_usage_pct",
+    "memory_usage_mb",
+    "retry_count",
 ]
 
 CATEGORICAL_COLS: list[str] = [
-    "ci_tool", "language", "os", "cloud_provider",
-    "failure_stage", "severity",
+    "ci_tool",
+    "language",
+    "os",
+    "cloud_provider",
+    "failure_stage",
+    "severity",
 ]
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
+
 class FeatureDrift(BaseModel):
     """Drift result for a single feature."""
+
     feature: str
     method: str  # "PSI" or "Chi-Square"
     score: float
@@ -70,7 +83,10 @@ class FeatureDrift(BaseModel):
 
 class DriftReport(BaseModel):
     """Complete drift report across all features."""
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     window_size: int
     features_analyzed: int
     features_drifted: int
@@ -80,6 +96,7 @@ class DriftReport(BaseModel):
 
 
 # ── PSI Calculation ───────────────────────────────────────────────────────────
+
 
 def compute_psi(
     reference: np.ndarray,
@@ -137,6 +154,7 @@ def classify_psi(psi: float) -> str:
 
 # ── Chi-Square for categoricals ───────────────────────────────────────────────
 
+
 def compute_chi_square(
     reference: pd.Series,
     current: pd.Series,
@@ -165,6 +183,7 @@ def compute_chi_square(
 
 
 # ── Main Drift Analysis ──────────────────────────────────────────────────────
+
 
 def load_training_data() -> pd.DataFrame:
     """Load the original training dataset for reference distribution."""
@@ -212,18 +231,23 @@ def analyze_drift(
         psi_score = compute_psi(ref_vals, cur_vals)
         severity = classify_psi(psi_score)
 
-        results.append(FeatureDrift(
-            feature=col,
-            method="PSI",
-            score=round(psi_score, 4),
-            p_value=None,
-            is_drifted=psi_score >= PSI_THRESHOLD,
-            severity=severity,
-        ))
+        results.append(
+            FeatureDrift(
+                feature=col,
+                method="PSI",
+                score=round(psi_score, 4),
+                p_value=None,
+                is_drifted=psi_score >= PSI_THRESHOLD,
+                severity=severity,
+            )
+        )
         log.info("  %s: PSI=%.4f → %s", col, psi_score, severity)
 
     # ── Categorical features: Chi-Square ─────────────────────────────────────
-    log.info("Reasoning: Computing Chi-Square for %d categorical features.", len(CATEGORICAL_COLS))
+    log.info(
+        "Reasoning: Computing Chi-Square for %d categorical features.",
+        len(CATEGORICAL_COLS),
+    )
     for col in CATEGORICAL_COLS:
         if col not in live_df.columns:
             log.warning("Skipping %s — not in live data.", col)
@@ -231,21 +255,27 @@ def analyze_drift(
 
         chi2, p_val = compute_chi_square(reference_df[col], live_df[col])
         is_drifted = p_val < 0.05
-        severity = "severe" if p_val < 0.001 else ("moderate" if p_val < 0.05 else "none")
+        severity = (
+            "severe" if p_val < 0.001 else ("moderate" if p_val < 0.05 else "none")
+        )
 
-        results.append(FeatureDrift(
-            feature=col,
-            method="Chi-Square",
-            score=round(chi2, 4),
-            p_value=round(p_val, 6),
-            is_drifted=is_drifted,
-            severity=severity,
-        ))
+        results.append(
+            FeatureDrift(
+                feature=col,
+                method="Chi-Square",
+                score=round(chi2, 4),
+                p_value=round(p_val, 6),
+                is_drifted=is_drifted,
+                severity=severity,
+            )
+        )
         log.info("  %s: χ²=%.4f, p=%.6f → %s", col, chi2, p_val, severity)
 
     # ── Build report ──────────────────────────────────────────────────────────
     n_drifted = sum(1 for r in results if r.is_drifted)
-    retrain_needed = any(r.method == "PSI" and r.score >= PSI_THRESHOLD for r in results)
+    retrain_needed = any(
+        r.method == "PSI" and r.score >= PSI_THRESHOLD for r in results
+    )
 
     report = DriftReport(
         window_size=len(live_logs),
@@ -286,24 +316,32 @@ def _update_registry(retrain_suggested: bool) -> None:
 
 # ── CLI Entry Point ───────────────────────────────────────────────────────────
 
+
 def main() -> None:
     """Run drift analysis using stream simulator data."""
     log.info("=== Sentinel-AIOps | drift_monitor.py ===")
 
     # Import stream simulator
     import sys
+
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
     from stream_simulator import ChaosLevel, log_generator
 
     # Generate a window of 200 live logs with moderate chaos
     log.info("Reasoning: Generating 200 live logs with MEDIUM chaos for drift test.")
-    live_logs = [record.model_dump() for record in log_generator(200, ChaosLevel.MEDIUM)]
+    live_logs = [
+        record.model_dump() for record in log_generator(200, ChaosLevel.MEDIUM)
+    ]
 
     report = analyze_drift(live_logs)
 
     log.info("=== Drift Analysis Complete ===")
-    log.info("Features drifted: %d/%d | Retrain suggested: %s",
-             report.features_drifted, report.features_analyzed, report.retrain_suggested)
+    log.info(
+        "Features drifted: %d/%d | Retrain suggested: %s",
+        report.features_drifted,
+        report.features_analyzed,
+        report.retrain_suggested,
+    )
 
 
 if __name__ == "__main__":

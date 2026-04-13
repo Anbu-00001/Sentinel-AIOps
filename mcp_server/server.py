@@ -13,21 +13,7 @@ Workflow Rules (AGENTS.md):
   - Serve all inference via local-first FastMCP.
 """
 
-import json
-import logging
-import os
-import sys
-import time
-from typing import Any, Dict
-from concurrent.futures import ThreadPoolExecutor
-
-# Global thread pool for offloading database I/O
-_db_pool = ThreadPoolExecutor(max_workers=4)
-
-import joblib
-import numpy as np
-import pandas as pd
-from mcp.server.fastmcp import FastMCP
+from .logic import validate_input, run_prediction
 from prometheus_client import (
     Counter,
     Gauge,
@@ -35,21 +21,32 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
-from database import LogEntry, get_session, init_db  # noqa: E402
-from .logic import REQUIRED_KEYS, OPTIONAL_KEYS, validate_input, run_prediction
+from mcp.server.fastmcp import FastMCP
+import joblib
+import json
+import logging
+import os
+import time
+from typing import Any, Dict
+from concurrent.futures import ThreadPoolExecutor
 
-# ── Logging ───────────────────────────────────────────────────────────────────
+# Global thread pool for offloading database I/O
+_db_pool = ThreadPoolExecutor(max_workers=4)
+
+from database import LogEntry, get_session, init_db  # noqa: E402
+
+# ── Logging ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("sentinel.mcp_server")
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths ───────────────────────────────────────────────────────────────
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(ROOT, "models")
 
-# ── Prometheus metrics ────────────────────────────────────────────────────────
+# ── Prometheus metrics ──────────────────────────────────────────────────
 INFERENCE_LATENCY = Histogram(
     "inference_latency_seconds",
     "Time spent on a single analyze_log inference",
@@ -94,10 +91,10 @@ def _refresh_drift_metric() -> None:
 # ── Removed redundant local schema definitions — now in logic.py ─────────────
 
 
-# ── Load artifacts at startup ─────────────────────────────────────────────────
+# ── Load artifacts at startup ───────────────────────────────────────────
 log.info(
-    "Reasoning: Loading v3 model artifacts from %s at server startup.", MODELS_DIR
-)
+    "Reasoning: Loading v3 model artifacts from %s at server startup.",
+    MODELS_DIR)
 
 try:
     _model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
@@ -131,7 +128,7 @@ _feature_names.extend(_meta["bool_cols"])
 # Seed drift metric on startup
 _refresh_drift_metric()
 
-# ── FastMCP application ───────────────────────────────────────────────────────
+# ── FastMCP application ─────────────────────────────────────────────────
 mcp = FastMCP(
     name="Sentinel-AIOps-v3",
     instructions=(
@@ -145,14 +142,13 @@ mcp = FastMCP(
 # ── Removed redundant local transforms — now in logic.py ──────────────────
 
 
-
 def get_prometheus_metrics() -> str:
     """Return Prometheus text exposition format."""
     _refresh_drift_metric()
     return generate_latest().decode("utf-8")
 
 
-# ── MCP Tool ──────────────────────────────────────────────────────────────────
+# ── MCP Tool ────────────────────────────────────────────────────────────
 
 @mcp.tool()
 def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
@@ -181,8 +177,14 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
     # ── Predict ───────────────────────────────────────────────────────────
     try:
         res = run_prediction(
-            features, _model, _le, _scaler, _hasher, _tfidf, _meta, _feature_names
-        )
+            features,
+            _model,
+            _le,
+            _scaler,
+            _hasher,
+            _tfidf,
+            _meta,
+            _feature_names)
         prediction = res["prediction"]
         confidence = res["confidence"]
         top_features = res["top_features"]
@@ -215,7 +217,9 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
                     top_features=top_features,
                 )
                 session.add(entry)
-            log.info("Inference persisted to database (prediction=%s).", prediction)
+            log.info(
+                "Inference persisted to database (prediction=%s).",
+                prediction)
         except Exception as db_exc:
             log.warning("DB write failed (non-fatal): %s", db_exc)
 
@@ -228,7 +232,7 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # Dual mode: MCP on stdio + optional HTTP metrics endpoint
     import threading
@@ -236,6 +240,7 @@ if __name__ == "__main__":
 
     class MetricsHandler(BaseHTTPRequestHandler):
         """Minimal HTTP handler for /metrics."""
+
         def do_GET(self) -> None:
             if self.path == "/metrics":
                 body = get_prometheus_metrics().encode("utf-8")

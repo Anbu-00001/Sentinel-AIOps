@@ -32,12 +32,13 @@ from database import LogEntry, get_session, init_db  # noqa: E402
 from config import PSI_SEVERE_THRESHOLD, PSI_MODERATE_THRESHOLD, RETRAIN_THRESHOLD
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("sentinel.dashboard")
 
 # ── Import Decoupled ML Logic ───────────────────────────────────────────────
-from mcp_server.logic import validate_input, run_prediction  # noqa: E402
-
+from mcp_server.logic import run_prediction  # noqa: E402
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,38 +50,45 @@ log.info("Reasoning: Initializing SQLite database for dashboard queries.")
 init_db()
 
 # ── Load Mathematical Artifacts ──────────────────────────────────────────────
-log.info("Reasoning: Loading model artifacts for mathematical synchronization & inline inference.")
+log.info(
+    "Reasoning: Loading model artifacts for mathematical synchronization & inline inference."
+)
 try:
     _scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
     _model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
     _le = joblib.load(os.path.join(MODELS_DIR, "label_encoder.joblib"))
     _hasher = joblib.load(os.path.join(MODELS_DIR, "hasher.joblib"))
     _tfidf = joblib.load(os.path.join(MODELS_DIR, "tfidf.joblib"))
-    
+
     with open(os.path.join(MODELS_DIR, "feature_meta.json")) as f:
         _meta = json.load(f)
-        
+
     _feature_names = (
-        _meta["numerical_cols"] + 
-        [f"hash_{i}" for i in range(_meta["hash_n_features"])] +
-        [f"tfidf_{i}" for i in range(_meta["tfidf_max_features"])] +
-        _meta["dummy_column_order"] + _meta["bool_cols"]
+        _meta["numerical_cols"]
+        + [f"hash_{i}" for i in range(_meta["hash_n_features"])]
+        + [f"tfidf_{i}" for i in range(_meta["tfidf_max_features"])]
+        + _meta["dummy_column_order"]
+        + _meta["bool_cols"]
     )
-    
+
     # Derive dynamic baselines from fitted scaler means
     _BASELINE_MEANS = {
-        col: float(_scaler.mean_[i]) 
-        for i, col in enumerate(_meta["numerical_cols"])
+        col: float(_scaler.mean_[i]) for i, col in enumerate(_meta["numerical_cols"])
     }
     _INFERENCE_READY = True
     log.info("Dashboard Artifacts Loaded. Feature Dimension: %d", len(_feature_names))
 except Exception as exc:
-    log.warning("Failed to load artifacts for synchronization: %s. Using safe defaults.", exc)
+    log.warning(
+        "Failed to load artifacts for synchronization: %s. Using safe defaults.", exc
+    )
     _INFERENCE_READY = False
     _BASELINE_MEANS = {
-        "build_duration_sec": 1800.0, "test_duration_sec": 300.0,
-        "deploy_duration_sec": 150.0, "cpu_usage_pct": 50.0,
-        "memory_usage_mb": 8192.0, "retry_count": 2.5
+        "build_duration_sec": 1800.0,
+        "test_duration_sec": 300.0,
+        "deploy_duration_sec": 150.0,
+        "cpu_usage_pct": 50.0,
+        "memory_usage_mb": 8192.0,
+        "retry_count": 2.5,
     }
 
 # ── Pydantic Models ──────────────────────────────────────────────────────────
@@ -88,6 +96,7 @@ except Exception as exc:
 
 class HealthStatus(BaseModel):
     """System health status."""
+
     badge: str
     label: str
     color: str
@@ -99,6 +108,7 @@ class HealthStatus(BaseModel):
 
 class DriftHeatmapEntry(BaseModel):
     """Single cell in the drift heatmap."""
+
     feature: str
     method: str
     score: float
@@ -108,6 +118,7 @@ class DriftHeatmapEntry(BaseModel):
 
 class LogHistoryEntry(BaseModel):
     """A single inference history record."""
+
     id: int
     timestamp: Optional[str] = None
     prediction: str
@@ -117,6 +128,7 @@ class LogHistoryEntry(BaseModel):
 
 class DashboardData(BaseModel):
     """Complete dashboard payload."""
+
     health: HealthStatus
     drift_heatmap: list[DriftHeatmapEntry]
     model_version: Optional[str] = None
@@ -129,6 +141,7 @@ class GitHubWebhookPayload(BaseModel):
     Accepts standard GitHub Actions workflow_run / check_run webhook events.
     Only the fields we need for mapping are required; the rest are ignored.
     """
+
     action: str = Field(..., description="Event action (e.g. 'completed')")
     repository: Optional[dict] = Field(default=None)
     workflow_run: Optional[dict] = Field(default=None)
@@ -224,29 +237,49 @@ def _compute_health(
     total: int = drift_report.get("features_analyzed", 0) if drift_report else 0
     last_check: Optional[str] = registry.get("last_drift_check") if registry else None
 
-    retrain_json: bool = drift_report.get("retrain_suggested", False) if drift_report else False
-    retrain_db: bool = db_signal.get("db_retrain_suggested", False) if db_signal else False
+    retrain_json: bool = (
+        drift_report.get("retrain_suggested", False) if drift_report else False
+    )
+    retrain_db: bool = (
+        db_signal.get("db_retrain_suggested", False) if db_signal else False
+    )
     retrain: bool = retrain_json or retrain_db
 
     if retrain:
-        source = "JSON report" if retrain_json else f"DB signal (mean_conf={db_signal['db_mean_confidence']:.3f})"
+        source = (
+            "JSON report"
+            if retrain_json
+            else f"DB signal (mean_conf={db_signal['db_mean_confidence']:.3f})"
+        )
         log.info("Training Required triggered by: %s", source)
         return HealthStatus(
-            badge="🔴", label="Training Required", color="#ef4444",
-            retrain_suggested=True, features_drifted=n_drifted,
-            total_features=total, last_drift_check=last_check,
+            badge="🔴",
+            label="Training Required",
+            color="#ef4444",
+            retrain_suggested=True,
+            features_drifted=n_drifted,
+            total_features=total,
+            last_drift_check=last_check,
         )
     elif n_drifted > 0:
         return HealthStatus(
-            badge="🟡", label="Drift Detected", color="#eab308",
-            retrain_suggested=False, features_drifted=n_drifted,
-            total_features=total, last_drift_check=last_check,
+            badge="🟡",
+            label="Drift Detected",
+            color="#eab308",
+            retrain_suggested=False,
+            features_drifted=n_drifted,
+            total_features=total,
+            last_drift_check=last_check,
         )
     else:
         return HealthStatus(
-            badge="🟢", label="Healthy", color="#22c55e",
-            retrain_suggested=False, features_drifted=n_drifted,
-            total_features=total, last_drift_check=last_check,
+            badge="🟢",
+            label="Healthy",
+            color="#22c55e",
+            retrain_suggested=False,
+            features_drifted=n_drifted,
+            total_features=total,
+            last_drift_check=last_check,
         )
 
 
@@ -332,13 +365,15 @@ def _compute_dynamic_psi() -> list[DriftHeatmapEntry]:
         else:
             severity = "stable"
 
-        entries.append(DriftHeatmapEntry(
-            feature=feat,
-            method="PSI (live-DB)",
-            score=psi_score,
-            severity=severity,
-            is_drifted=psi_score >= PSI_MODERATE_THRESHOLD,
-        ))
+        entries.append(
+            DriftHeatmapEntry(
+                feature=feat,
+                method="PSI (live-DB)",
+                score=psi_score,
+                severity=severity,
+                is_drifted=psi_score >= PSI_MODERATE_THRESHOLD,
+            )
+        )
 
     return entries
 
@@ -391,9 +426,7 @@ def _map_github_to_features(payload: GitHubWebhookPayload) -> dict[str, Any]:
             started = datetime.fromisoformat(
                 wf["run_started_at"].replace("Z", "+00:00")
             )
-            ended = datetime.fromisoformat(
-                wf["updated_at"].replace("Z", "+00:00")
-            )
+            ended = datetime.fromisoformat(wf["updated_at"].replace("Z", "+00:00"))
             total_sec = int((ended - started).total_seconds())
             build_dur = max(10, total_sec // 3)
             test_dur = max(5, total_sec // 3)
@@ -423,14 +456,14 @@ def _map_github_to_features(payload: GitHubWebhookPayload) -> dict[str, Any]:
         # (via repository dispatch client_payload or outputs). Fall back to
         # deterministic estimates derived from run duration (no random values).
         "cpu_usage_pct": float(
-            wf.get("cpu_usage_pct")                     # custom field if present
+            wf.get("cpu_usage_pct")  # custom field if present
             or (payload.repository or {}).get("cpu_usage_pct", None)
-            or max(10.0, min(95.0, build_dur / 3.0))    # estimate from duration
+            or max(10.0, min(95.0, build_dur / 3.0))  # estimate from duration
         ),
         "memory_usage_mb": int(
-            wf.get("memory_usage_mb")                   # custom field if present
+            wf.get("memory_usage_mb")  # custom field if present
             or (payload.repository or {}).get("memory_usage_mb", None)
-            or max(256, min(8192, build_dur * 12))       # estimate from duration
+            or max(256, min(8192, build_dur * 12))  # estimate from duration
         ),
         "retry_count": max(0, wf.get("run_attempt", 1) - 1),
         "error_message": error_message,
@@ -449,6 +482,7 @@ def _map_github_to_features(payload: GitHubWebhookPayload) -> dict[str, Any]:
 
 
 # ── API Endpoints ──────────────────────────────────────────────────────────────
+
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:
@@ -577,9 +611,7 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
 
     # ── Filter: only process actionable failures ──────────────────────
     if action != "completed" or conclusion not in ("failure", "timed_out"):
-        log.info(
-            "Webhook ignored (action=%s, conclusion=%s).", action, conclusion
-        )
+        log.info("Webhook ignored (action=%s, conclusion=%s).", action, conclusion)
         return JSONResponse(
             content={"status": "ignored", "action": action, "conclusion": conclusion},
             status_code=200,
@@ -636,7 +668,8 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
         await run_in_threadpool(_save_webhook)
         log.info(
             "Webhook entry persisted (conclusion=%s, prediction=%s).",
-            conclusion, prediction,
+            conclusion,
+            prediction,
         )
     except Exception as db_exc:
         log.error("Webhook DB write failed: %s", db_exc)
@@ -684,8 +717,16 @@ async def dashboard_ui() -> str:
                 .all()
             )
             for row in recent:
-                ts = row.timestamp.strftime("%Y-%m-%d %H:%M:%S") if row.timestamp else "—"
-                conf_color = "#22c55e" if row.confidence > 0.7 else "#eab308" if row.confidence > 0.4 else "#ef4444"
+                ts = (
+                    row.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    if row.timestamp
+                    else "—"
+                )
+                conf_color = (
+                    "#22c55e"
+                    if row.confidence > 0.7
+                    else "#eab308" if row.confidence > 0.4 else "#ef4444"
+                )
                 history_rows += f"""
         <tr style="background:#1a1a2e; border-left: 3px solid #6366f1;">
             <td style="padding:10px 14px; font-family:monospace; font-size:13px;">{ts}</td>
@@ -855,5 +896,6 @@ async def dashboard_ui() -> str:
 
 if __name__ == "__main__":
     import uvicorn
+
     log.info("Starting Sentinel-AIOps Dashboard on http://0.0.0.0:8200")
     uvicorn.run(app, host="0.0.0.0", port=8200)

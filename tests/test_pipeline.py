@@ -50,12 +50,12 @@ IGNORED_PAYLOAD = {
     "action": "completed",
     "repository": {"full_name": "org/sentinel-ci"},
     "workflow_run": {
-        "conclusion": "success",   # <── not a failure
+        "conclusion": "success",  # <── not a failure
     },
 }
 
 IN_PROGRESS_PAYLOAD = {
-    "action": "in_progress",     # <── not "completed"
+    "action": "in_progress",  # <── not "completed"
     "workflow_run": {"conclusion": "failure"},
 }
 
@@ -92,9 +92,9 @@ class TestWebhookToSQLToDashboard:
         response = client.get("/api/history?limit=10")
         history = response.json()
         sources = {r.get("event_source") for r in history}
-        assert "github_webhook" in sources, (
-            f"Expected 'github_webhook' in event sources, got: {sources}"
-        )
+        assert (
+            "github_webhook" in sources
+        ), f"Expected 'github_webhook' in event sources, got: {sources}"
 
     def test_dashboard_inference_count_increments(self, client) -> None:
         """After webhook, /api/dashboard inference_count is > 0."""
@@ -103,9 +103,9 @@ class TestWebhookToSQLToDashboard:
         response = client.get("/api/dashboard")
         assert response.status_code == 200
         data = response.json()
-        assert data["inference_count"] >= 1, (
-            f"inference_count should be >= 1, got: {data['inference_count']}"
-        )
+        assert (
+            data["inference_count"] >= 1
+        ), f"inference_count should be >= 1, got: {data['inference_count']}"
 
     def test_success_webhook_is_ignored(self, client) -> None:
         """A success-conclusion webhook returns {status: ignored}."""
@@ -118,9 +118,9 @@ class TestWebhookToSQLToDashboard:
         assert data.get("status") == "ignored", f"Expected ignored, got: {data}"
 
         after = client.get("/api/history?limit=200").json()
-        assert len(after) == before_count, (
-            "Success webhook should not create a new DB record"
-        )
+        assert (
+            len(after) == before_count
+        ), "Success webhook should not create a new DB record"
 
     def test_in_progress_webhook_is_ignored(self, client) -> None:
         """A non-completed action webhook returns {status: ignored}."""
@@ -148,9 +148,11 @@ class TestWebhookToSQLToDashboard:
         client.post("/webhook/github", json=FAILURE_PAYLOAD)
         response = client.get("/api/history?limit=10")
         history = response.json()
-        webhook_entries = [r for r in history if r.get("event_source") == "github_webhook"]
+        webhook_entries = [
+            r for r in history if r.get("event_source") == "github_webhook"
+        ]
         assert len(webhook_entries) > 0
         latest = webhook_entries[0]
-        assert latest.get("raw_payload") is not None, (
-            "webhook entries must have raw_payload for audit"
-        )
+        assert (
+            latest.get("raw_payload") is not None
+        ), "webhook entries must have raw_payload for audit"

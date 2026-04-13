@@ -27,6 +27,7 @@ import os
 
 import joblib
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,7 +54,9 @@ DATA_DIR = os.path.join(ROOT, "data")
 MODELS_DIR = os.path.join(ROOT, "models")
 
 N_ESTIMATORS = 200
-CONTAMINATION = 0.1   # Conservative prior: ~10% of CI/CD runs exhibit anomalous behaviour
+CONTAMINATION = (
+    0.1  # Conservative prior: ~10% of CI/CD runs exhibit anomalous behaviour
+)
 
 
 def c_factor(n: int) -> float:
@@ -77,17 +80,19 @@ def compute_anomaly_scores(model: IsolationForest, X) -> np.ndarray:
         -E[h(x)] / c(n_max_samples)  (shifted so that 0.5 = boundary)
     We recover E[h(x)] and apply the raw formula for full interpretability.
     """
-    log.info("Reasoning: Computing anomaly scores via s(x,n) = 2^(-E[h(x)]/c(n)) "
-             "using sklearn score_samples (vectorized, sparse-safe).")
+    log.info(
+        "Reasoning: Computing anomaly scores via s(x,n) = 2^(-E[h(x)]/c(n)) "
+        "using sklearn score_samples (vectorized, sparse-safe)."
+    )
     n_train = model.max_samples_
     c_n = c_factor(n_train)
 
     # sklearn score_samples = -mean_path_length / c(n) + offset(0.5)
     # raw_score = score_samples + 0.5  →  raw_score = -E[h(x)] / c(n)
     # E[h(x)] = -raw_score * c(n)
-    raw = model.score_samples(X)            # shape (n_samples,)
-    e_h_x = -(raw) * c_n                   # recover mean path length
-    scores = np.power(2.0, -e_h_x / c_n)   # s(x, n) ∈ (0, 1]
+    raw = model.score_samples(X)  # shape (n_samples,)
+    e_h_x = -(raw) * c_n  # recover mean path length
+    scores = np.power(2.0, -e_h_x / c_n)  # s(x, n) ∈ (0, 1]
     return scores
 
 
@@ -98,14 +103,28 @@ def plot_pr_curve(y_true_binary: np.ndarray, scores: np.ndarray, out_path: str):
     pr_auc = average_precision_score(y_true_binary, scores)
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.plot(recall, precision, lw=2, color="#4C72B0",
-            label=f"Isolation Forest (PR AUC = {pr_auc:.4f})")
+    ax.plot(
+        recall,
+        precision,
+        lw=2,
+        color="#4C72B0",
+        label=f"Isolation Forest (PR AUC = {pr_auc:.4f})",
+    )
     ax.fill_between(recall, precision, alpha=0.15, color="#4C72B0")
-    ax.axhline(y=CONTAMINATION, color="red", linestyle="--", lw=1.2,
-               label=f"Baseline (contamination = {CONTAMINATION})")
+    ax.axhline(
+        y=CONTAMINATION,
+        color="red",
+        linestyle="--",
+        lw=1.2,
+        label=f"Baseline (contamination = {CONTAMINATION})",
+    )
     ax.set_xlabel("Recall", fontsize=12)
     ax.set_ylabel("Precision", fontsize=12)
-    ax.set_title("Precision-Recall Curve — Sentinel-AIOps Anomaly Detector", fontsize=13, fontweight="bold")
+    ax.set_title(
+        "Precision-Recall Curve — Sentinel-AIOps Anomaly Detector",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.legend(fontsize=11)
     ax.grid(alpha=0.35)
     fig.tight_layout()
@@ -115,11 +134,15 @@ def plot_pr_curve(y_true_binary: np.ndarray, scores: np.ndarray, out_path: str):
     return pr_auc
 
 
-def plot_confusion_matrix(y_true_binary: np.ndarray, y_pred_binary: np.ndarray, out_path: str):
+def plot_confusion_matrix(
+    y_true_binary: np.ndarray, y_pred_binary: np.ndarray, out_path: str
+):
     """Generate and save a Confusion Matrix."""
     log.info("Reasoning: Generating Confusion Matrix artifact.")
     cm = confusion_matrix(y_true_binary, y_pred_binary)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Normal", "Anomaly"])
+    disp = ConfusionMatrixDisplay(
+        confusion_matrix=cm, display_labels=["Normal", "Anomaly"]
+    )
     fig, ax = plt.subplots(figsize=(6, 5))
     disp.plot(ax=ax, colorbar=True, cmap="Blues")
     ax.set_title("Confusion Matrix — Sentinel-AIOps", fontsize=13, fontweight="bold")
@@ -139,8 +162,11 @@ def main():
     log.info("Feature matrix: %s | Labels: %d classes", X.shape, len(np.unique(labels)))
 
     # ── Model Training (Unsupervised — labels NOT used) ──────────────────────
-    log.info("Reasoning: Training Isolation Forest (%d estimators, contamination=%.2f). Labels are EXCLUDED from training.",
-             N_ESTIMATORS, CONTAMINATION)
+    log.info(
+        "Reasoning: Training Isolation Forest (%d estimators, contamination=%.2f). Labels are EXCLUDED from training.",
+        N_ESTIMATORS,
+        CONTAMINATION,
+    )
     model = IsolationForest(
         n_estimators=N_ESTIMATORS,
         contamination=CONTAMINATION,
@@ -154,24 +180,34 @@ def main():
     # ── Anomaly Scoring ──────────────────────────────────────────────────────
     scores = compute_anomaly_scores(model, X)
     np.save(os.path.join(MODELS_DIR, "anomaly_scores.npy"), scores)
-    log.info("Score stats — min: %.4f | max: %.4f | mean: %.4f | std: %.4f",
-             scores.min(), scores.max(), scores.mean(), scores.std())
+    log.info(
+        "Score stats — min: %.4f | max: %.4f | mean: %.4f | std: %.4f",
+        scores.min(),
+        scores.max(),
+        scores.mean(),
+        scores.std(),
+    )
 
     # IF predicts: -1 = anomaly, 1 = normal
     raw_preds = model.predict(X)
-    y_pred_binary = (raw_preds == -1).astype(int)   # 1 = anomaly
+    y_pred_binary = (raw_preds == -1).astype(int)  # 1 = anomaly
 
     # ── Validation: use labels as proxy for "what should be anomalies" ───────
     # Strategy: treat 'Timeout' and 'Resource Exhaustion' as the most
     # anomalous classes (operational definition); rest as normal.
     ANOMALY_CLASSES = {"Timeout", "Resource Exhaustion", "Security Scan Failure"}
-    log.info("Reasoning: Using %s as 'anomaly' proxy classes for validation only.", ANOMALY_CLASSES)
+    log.info(
+        "Reasoning: Using %s as 'anomaly' proxy classes for validation only.",
+        ANOMALY_CLASSES,
+    )
     y_true_binary = np.isin(labels, list(ANOMALY_CLASSES)).astype(int)
 
-    pr_auc = plot_pr_curve(y_true_binary, scores,
-                           os.path.join(MODELS_DIR, "pr_curve.png"))
-    plot_confusion_matrix(y_true_binary, y_pred_binary,
-                          os.path.join(MODELS_DIR, "confusion_matrix.png"))
+    pr_auc = plot_pr_curve(
+        y_true_binary, scores, os.path.join(MODELS_DIR, "pr_curve.png")
+    )
+    plot_confusion_matrix(
+        y_true_binary, y_pred_binary, os.path.join(MODELS_DIR, "confusion_matrix.png")
+    )
 
     f1 = f1_score(y_true_binary, y_pred_binary, zero_division=0)
     log.info("Validation Metrics — F1-Score: %.4f | PR AUC: %.4f", f1, pr_auc)

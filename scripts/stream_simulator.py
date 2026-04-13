@@ -31,11 +31,19 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("sentinel.stream")
 
 # ── Constants (based on training distribution from data_summary.json) ─────────
-CI_TOOLS: list[str] = ["Jenkins", "GitHub Actions", "GitLab CI", "CircleCI", "Travis CI"]
+CI_TOOLS: list[str] = [
+    "Jenkins",
+    "GitHub Actions",
+    "GitLab CI",
+    "CircleCI",
+    "Travis CI",
+]
 REPOS: list[str] = [f"repo-{i}" for i in range(50)]  # subset of 500
 AUTHORS: list[str] = [f"dev-{i}" for i in range(100)]  # subset of 1000
 LANGUAGES: list[str] = ["Python", "Java", "JavaScript", "Go", "Rust", "C++"]
@@ -44,9 +52,16 @@ CLOUD_PROVIDERS: list[str] = ["AWS", "GCP", "Azure", "On-Premise"]
 BRANCHES: list[str] = ["main", "develop", "feature", "hotfix"]
 FAILURE_STAGES: list[str] = ["build", "test", "deploy"]
 FAILURE_TYPES: list[str] = [
-    "Build Failure", "Configuration Error", "Dependency Error",
-    "Deployment Failure", "Network Error", "Permission Error",
-    "Resource Exhaustion", "Security Scan Failure", "Test Failure", "Timeout",
+    "Build Failure",
+    "Configuration Error",
+    "Dependency Error",
+    "Deployment Failure",
+    "Network Error",
+    "Permission Error",
+    "Resource Exhaustion",
+    "Security Scan Failure",
+    "Test Failure",
+    "Timeout",
 ]
 SEVERITIES: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -60,14 +75,29 @@ try:
     # Assuming column order: build, test, deploy, cpu, mem, retry
     _means = _scaler.mean_
     _stds = np.sqrt(_scaler.var_) if hasattr(_scaler, "var_") else [10.0] * 6
-    
+
     NORMAL_RANGES: dict[str, tuple[float, float]] = {
-        "build_duration_sec": (max(10, _means[0] - 2*_stds[0]), _means[0] + 2*_stds[0]),
-        "test_duration_sec": (max(5, _means[1] - 2*_stds[1]), _means[1] + 2*_stds[1]),
-        "deploy_duration_sec": (max(5, _means[2] - 2*_stds[2]), _means[2] + 2*_stds[2]),
-        "cpu_usage_pct": (max(0, _means[3] - 2*_stds[3]), min(100, _means[3] + 2*_stds[3])),
-        "memory_usage_mb": (max(256, _means[4] - 2*_stds[4]), _means[4] + 2*_stds[4]),
-        "retry_count": (max(0, _means[5] - 2*_stds[5]), _means[5] + 2*_stds[5]),
+        "build_duration_sec": (
+            max(10, _means[0] - 2 * _stds[0]),
+            _means[0] + 2 * _stds[0],
+        ),
+        "test_duration_sec": (
+            max(5, _means[1] - 2 * _stds[1]),
+            _means[1] + 2 * _stds[1],
+        ),
+        "deploy_duration_sec": (
+            max(5, _means[2] - 2 * _stds[2]),
+            _means[2] + 2 * _stds[2],
+        ),
+        "cpu_usage_pct": (
+            max(0, _means[3] - 2 * _stds[3]),
+            min(100, _means[3] + 2 * _stds[3]),
+        ),
+        "memory_usage_mb": (
+            max(256, _means[4] - 2 * _stds[4]),
+            _means[4] + 2 * _stds[4],
+        ),
+        "retry_count": (max(0, _means[5] - 2 * _stds[5]), _means[5] + 2 * _stds[5]),
     }
     log.info("Simulator synchronized with scaler: %s", NORMAL_RANGES)
 except Exception as exc:
@@ -88,19 +118,23 @@ import numpy as np
 
 class ChaosLevel(str, Enum):
     """Chaos engineering injection levels."""
+
     NONE = "none"
-    LOW = "low"       # 10% chance of OOD injection
+    LOW = "low"  # 10% chance of OOD injection
     MEDIUM = "medium"  # 30% chance
-    HIGH = "high"    # 60% chance
+    HIGH = "high"  # 60% chance
     EXTREME = "extreme"  # 100% — every log is OOD
 
 
 class LogRecord(BaseModel):
     """Pydantic model for a CI/CD log event."""
+
     log_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     pipeline_id: str = Field(default_factory=lambda: f"pipe-{uuid.uuid4().hex[:8]}")
     run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     ci_tool: str
     repository: str
     branch: str
@@ -123,7 +157,9 @@ class LogRecord(BaseModel):
     is_flaky_test: bool
     rollback_triggered: bool
     incident_created: bool
-    is_chaos: bool = Field(default=False, description="True if this record was injected by chaos mode")
+    is_chaos: bool = Field(
+        default=False, description="True if this record was injected by chaos mode"
+    )
 
 
 def _random_string(length: int = 40) -> str:
@@ -176,16 +212,45 @@ def _generate_log(chaos: ChaosLevel = ChaosLevel.NONE) -> LogRecord:
 
     if is_chaos:
         # OOD injection: 5x above normal ranges
-        build_dur = int(NORMAL_RANGES["build_duration_sec"][1] * CHAOS_MULTIPLIER * random.uniform(1.0, 2.0))
-        test_dur = int(NORMAL_RANGES["test_duration_sec"][1] * CHAOS_MULTIPLIER * random.uniform(1.0, 2.0))
-        deploy_dur = int(NORMAL_RANGES["deploy_duration_sec"][1] * CHAOS_MULTIPLIER * random.uniform(1.0, 2.0))
-        cpu = min(100.0, NORMAL_RANGES["cpu_usage_pct"][1] * CHAOS_MULTIPLIER * random.uniform(0.8, 1.0))
-        mem = int(NORMAL_RANGES["memory_usage_mb"][1] * CHAOS_MULTIPLIER * random.uniform(1.0, 2.0))
-        retry = int(NORMAL_RANGES["retry_count"][1] * CHAOS_MULTIPLIER * random.uniform(1.0, 3.0))
+        build_dur = int(
+            NORMAL_RANGES["build_duration_sec"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(1.0, 2.0)
+        )
+        test_dur = int(
+            NORMAL_RANGES["test_duration_sec"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(1.0, 2.0)
+        )
+        deploy_dur = int(
+            NORMAL_RANGES["deploy_duration_sec"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(1.0, 2.0)
+        )
+        cpu = min(
+            100.0,
+            NORMAL_RANGES["cpu_usage_pct"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(0.8, 1.0),
+        )
+        mem = int(
+            NORMAL_RANGES["memory_usage_mb"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(1.0, 2.0)
+        )
+        retry = int(
+            NORMAL_RANGES["retry_count"][1]
+            * CHAOS_MULTIPLIER
+            * random.uniform(1.0, 3.0)
+        )
     else:
-        build_dur = random.randint(*[int(x) for x in NORMAL_RANGES["build_duration_sec"]])
+        build_dur = random.randint(
+            *[int(x) for x in NORMAL_RANGES["build_duration_sec"]]
+        )
         test_dur = random.randint(*[int(x) for x in NORMAL_RANGES["test_duration_sec"]])
-        deploy_dur = random.randint(*[int(x) for x in NORMAL_RANGES["deploy_duration_sec"]])
+        deploy_dur = random.randint(
+            *[int(x) for x in NORMAL_RANGES["deploy_duration_sec"]]
+        )
         cpu = round(random.uniform(*NORMAL_RANGES["cpu_usage_pct"]), 1)
         mem = random.randint(*[int(x) for x in NORMAL_RANGES["memory_usage_mb"]])
         retry = random.randint(*[int(x) for x in NORMAL_RANGES["retry_count"]])
@@ -222,7 +287,9 @@ def log_generator(
     chaos: ChaosLevel = ChaosLevel.NONE,
 ) -> Generator[LogRecord, None, None]:
     """Synchronous generator producing CI/CD log records."""
-    log.info("Reasoning: Starting log generator (count=%d, chaos=%s).", count, chaos.value)
+    log.info(
+        "Reasoning: Starting log generator (count=%d, chaos=%s).", count, chaos.value
+    )
     for _ in range(count):
         yield _generate_log(chaos)
 
@@ -233,8 +300,12 @@ async def async_log_generator(
     delay_ms: int = 100,
 ) -> AsyncGenerator[LogRecord, None]:
     """Async generator simulating real-time log arrival with configurable delay."""
-    log.info("Reasoning: Starting async log generator (count=%d, chaos=%s, delay=%dms).",
-             count, chaos.value, delay_ms)
+    log.info(
+        "Reasoning: Starting async log generator (count=%d, chaos=%s, delay=%dms).",
+        count,
+        chaos.value,
+        delay_ms,
+    )
     for _ in range(count):
         yield _generate_log(chaos)
         await asyncio.sleep(delay_ms / 1000.0)
@@ -256,7 +327,9 @@ async def health() -> dict[str, str]:
 
 @app.get("/stream")
 async def stream_logs(
-    count: int = Query(default=10, ge=1, le=1000, description="Number of logs to generate"),
+    count: int = Query(
+        default=10, ge=1, le=1000, description="Number of logs to generate"
+    ),
     chaos: ChaosLevel = Query(default=ChaosLevel.NONE, description="Chaos level"),
 ) -> list[dict]:
     """Generate a batch of CI/CD log records."""
@@ -274,5 +347,6 @@ async def stream_single(
 
 if __name__ == "__main__":
     import uvicorn
+
     log.info("Starting Stream Simulator on http://0.0.0.0:8100")
     uvicorn.run(app, host="0.0.0.0", port=8100)
