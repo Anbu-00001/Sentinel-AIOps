@@ -45,43 +45,42 @@ Before deploying, we verified data lineage. A Normalized Mutual Information (NMI
 ## 🏗️ Interactive Architecture
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart TB
-    subgraph Ingestion["📥 GitHub Integration"]
+    subgraph Ingestion ["Ingestion: GitHub Integration"]
         GH["GitHub Actions\nCI/CD Failure"]
         WH["POST /webhook/github\n:8200"]
-        GH -->|workflow_run event| WH
+        GH -->|"workflow_run event"| WH
     end
 
-    subgraph Persistence["🗄️ SQLite Persistence"]
+    subgraph Persistence ["Persistence: SQLite"]
         DB[("sentinel.db\nLogEntry Table")]
-        WH -->|event_source=github_webhook| DB
+        WH -->|"event_source=github_webhook"| DB
     end
 
-    subgraph Inference["⚡ FastMCP Server :9090"]
+    subgraph Inference ["Inference: FastMCP Server"]
         MCP["analyze_log Tool\nLightGBM v2"]
-        PROM["Prometheus /metrics\nLatency · Drift"]
-        MCP -->|prediction + confidence| DB
+        PROM["Prometheus Metrics\nLatency & Drift"]
+        MCP -->|"prediction + confidence"| DB
         MCP --> PROM
     end
 
-    subgraph Monitoring["📊 Observability Dashboard :8200"]
+    subgraph Monitoring ["Monitoring: Dashboard"]
         PSI["Dynamic PSI Heatmap\nlast 100 DB rows"]
-        BADGE["Health Badge\n🟢 🟡 🔴"]
+        BADGE["Health Badge\nLive Status"]
         HIST["Inference History\n/api/history"]
         PSI --> BADGE
-        DB -->|query| PSI
-        DB -->|query| HIST
+        DB -->|"query"| PSI
+        DB -->|"query"| HIST
     end
 
-    subgraph Feedback["👤 Human-in-the-Loop"]
+    subgraph Feedback ["Feedback: Human-in-the-Loop"]
         FH["submit_human_correction\nMCP Tool"]
         RT["Retrain Trigger\n>100 corrections"]
-        FH -->|Thread-Safe JSON| RT
+        FH -->|"Thread-Safe JSON"| RT
     end
 
-    WH -->|features| MCP
-    RT -->|Updates Registry| Inference
+    WH -->|"features"| MCP
+    RT -->|"Updates Registry"| MCP
 
     style Ingestion fill:#1e293b,stroke:#3b82f6,color:#f8fafc
     style Persistence fill:#1e293b,stroke:#f59e0b,color:#f8fafc

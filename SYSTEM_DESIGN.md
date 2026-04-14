@@ -8,41 +8,41 @@ Sentinel-AIOps is an event-driven MLOps platform for CI/CD log anomaly detection
 
 ```mermaid
 flowchart TB
-    subgraph Ingestion["📥 Data Ingestion"]
-        SS["Stream Simulator<br/>FastAPI :8100"]
-        CM["Chaos Mode<br/>5x OOD Injection"]
+    subgraph Ingestion ["Ingestion: Data Ingestion"]
+        SS["Stream Simulator\nFastAPI :8100"]
+        CM["Chaos Mode\n5x OOD Injection"]
         SS --> CM
     end
 
-    subgraph MLPipeline["🧠 ML Pipeline"]
-        PP["Preprocessor<br/>Scaler + Hasher + TF-IDF"]
-        LGBM["LightGBM v2<br/>Multiclass (10 classes)"]
-        REG["Model Registry<br/>registry.json"]
+    subgraph MLPipeline ["ML Pipeline"]
+        PP["Preprocessor\nScaler + Hasher + TF-IDF"]
+        LGBM["LightGBM v2\nMulticlass (10 classes)"]
+        REG["Model Registry\nregistry.json"]
         PP --> LGBM --> REG
     end
 
-    subgraph Inference["⚡ FastMCP Server :9090"]
-        MCP["analyze_log Tool<br/>Schema Validation"]
-        PROM["Prometheus /metrics<br/>Latency · Drift · Anomalies"]
+    subgraph Inference ["Inference: FastMCP Server"]
+        MCP["analyze_log Tool\nSchema Validation"]
+        PROM["Prometheus Metrics\nLatency & Drift"]
         MCP --> PROM
     end
 
-    subgraph Monitoring["📊 Observability"]
-        DM["Drift Monitor<br/>PSI + Chi-Square"]
+    subgraph Monitoring ["Monitoring: Observability"]
+        DM["Drift Monitor\nPSI + Chi-Square"]
         DR["drift_report.json"]
         DM --> DR
     end
 
-    subgraph Feedback["👤 Human-in-the-Loop"]
-        FH["Feedback Handler<br/>submit_human_correction"]
-        LBL["labels.json<br/>Thread-Safe Store"]
-        RT["Retrain Trigger<br/>count > 100"]
+    subgraph Feedback ["Feedback: Human-in-the-Loop"]
+        FH["Feedback Handler\nsubmit_human_correction"]
+        LBL["labels.json\nThread-Safe Store"]
+        RT["Retrain Trigger\ncount > 100"]
         FH --> LBL --> RT
     end
 
-    subgraph Dashboard["🖥️ Dashboard :8200"]
-        UI["Observability UI<br/>Health Badge + Heatmap"]
-        API["REST API<br/>/api/dashboard · /api/drift"]
+    subgraph Dashboard ["Dashboard: Next.js UI"]
+        UI["Observability UI\nHealth Badge + Heatmap"]
+        API["REST API\n/api/dashboard · /api/drift"]
     end
 
     SS -->|"JSON Logs"| MCP
@@ -78,13 +78,13 @@ OOD injection multiplies all numerical features by **5x** above training maximum
 
 ```mermaid
 flowchart LR
-    RAW["Raw CSV<br/>45K rows × 25 cols"] --> FE["Feature Engineering"]
-    FE --> NUM["StandardScaler<br/>6 numerical"]
-    FE --> HASH["FeatureHasher<br/>64 buckets"]
-    FE --> TFIDF["TF-IDF<br/>500 features"]
-    FE --> DUMMY["One-Hot<br/>~22 cols"]
-    NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix<br/>592 features"]
-    MAT --> LGBM["LightGBM GBDT<br/>300 rounds"]
+    RAW["Raw CSV\n45K rows × 25 cols"] --> FE["Feature Engineering"]
+    FE --> NUM["StandardScaler\n6 numerical"]
+    FE --> HASH["FeatureHasher\n64 buckets"]
+    FE --> TFIDF["TF-IDF\n500 features"]
+    FE --> DUMMY["One-Hot\n~22 cols"]
+    NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix\n592 features"]
+    MAT --> LGBM["LightGBM GBDT\n300 rounds"]
     LGBM --> PRED["10-Class Prediction"]
 ```
 
@@ -154,8 +154,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    PUSH["git push"] --> LINT["flake8<br/>PEP8 check"]
-    LINT --> TEST["pytest<br/>8 model tests"]
+    PUSH["git push"] --> LINT["flake8\nPEP8 check"]
+    LINT --> TEST["pytest\n8 model tests"]
     TEST --> PASS["✅ CI Green"]
 ```
 
