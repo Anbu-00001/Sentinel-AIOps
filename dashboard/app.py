@@ -55,6 +55,7 @@ def verify_webhook_signature(payload_body: bytes, signature_header: str, secret:
     ).hexdigest()
     return hmac.compare_digest(expected, signature_header)
 
+
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import LogEntry, get_session, init_db  # noqa: E402

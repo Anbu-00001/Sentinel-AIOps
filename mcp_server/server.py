@@ -289,4 +289,3 @@ if __name__ == "__main__":
 
     log.info("Starting Sentinel-AIOps v3 MCP server (stdio transport).")
     mcp.run(transport="stdio")
-

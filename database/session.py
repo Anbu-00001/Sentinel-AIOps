@@ -33,6 +33,7 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.execute("PRAGMA busy_timeout=5000")  # Wait up to 5s if locked
         cursor.close()
 
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 log = logging.getLogger("sentinel.database")
 
