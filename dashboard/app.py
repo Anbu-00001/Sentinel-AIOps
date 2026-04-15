@@ -13,6 +13,8 @@ Workflow Rules (AGENTS.md):
   - Type hinting + Pydantic validation throughout.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -20,11 +22,38 @@ import sys
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.concurrency import run_in_threadpool
 import joblib
+
+# ── Webhook Security ──────────────────────────────────────────────────────────
+GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+
+
+def verify_webhook_signature(payload_body: bytes, signature_header: str, secret: str) -> bool:
+    """
+    Verify GitHub webhook HMAC-SHA256 signature.
+
+    Args:
+        payload_body: Raw request body bytes.
+        signature_header: Value of X-Hub-Signature-256 header.
+        secret: The shared webhook secret.
+
+    Returns:
+        True if signature is valid, False otherwise.
+    """
+    if not secret:
+        log_msg = "GITHUB_WEBHOOK_SECRET not configured — skipping signature verification."
+        logging.getLogger("sentinel.dashboard").warning(log_msg)
+        return True  # Allow in dev; block in prod by setting the env var
+    if not signature_header:
+        return False
+    expected = "sha256=" + hmac.new(
+        secret.encode("utf-8"), payload_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
 
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -591,7 +620,7 @@ async def get_history(
 
 
 @app.post("/webhook/github")
-async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
+async def github_webhook(request: Request) -> JSONResponse:
     """
     Receive a GitHub Actions webhook (workflow_run events).
 
@@ -599,11 +628,29 @@ async def github_webhook(payload: GitHubWebhookPayload) -> JSONResponse:
     conclusion is "failure" or "timed_out". All other events
     return a 200 {"status": "ignored"} response.
 
+    Security: Verifies X-Hub-Signature-256 HMAC when GITHUB_WEBHOOK_SECRET is set.
+
     Configure in GitHub → Settings → Webhooks:
       Payload URL:  http://<your-host>:8200/webhook/github
       Content type: application/json
       Events:       Workflow runs
+      Secret:       <same value as GITHUB_WEBHOOK_SECRET env var>
     """
+    # ── HMAC Signature Verification ───────────────────────────────────
+    raw_body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not verify_webhook_signature(raw_body, signature, GITHUB_WEBHOOK_SECRET):
+        log.warning("Webhook signature verification FAILED. Rejecting request.")
+        raise HTTPException(status_code=403, detail="Invalid webhook signature.")
+
+    # Parse and validate the payload
+    try:
+        body_json = json.loads(raw_body)
+        payload = GitHubWebhookPayload(**body_json)
+    except Exception as exc:
+        log.error("Webhook payload parse error: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid payload.") from exc
+
     wf = payload.workflow_run or {}
     cr = payload.check_run or {}
     conclusion = wf.get("conclusion", cr.get("conclusion", ""))

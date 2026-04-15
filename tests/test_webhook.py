@@ -78,16 +78,16 @@ class TestGitHubWebhook:
         data = response.json()
         assert data.get("status") == "ignored"
 
-    def test_webhook_missing_action_returns_422(self, client) -> None:
-        """Missing the required 'action' field triggers validation error."""
+    def test_webhook_missing_action_returns_400(self, client) -> None:
+        """Missing the required 'action' field triggers validation error (400)."""
         payload = {"repository": {"full_name": "org/test"}}
         response = client.post("/webhook/github", json=payload)
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    def test_webhook_empty_body_returns_422(self, client) -> None:
-        """An empty JSON body triggers validation error."""
+    def test_webhook_empty_body_returns_400(self, client) -> None:
+        """An empty JSON body triggers validation error (400)."""
         response = client.post("/webhook/github", json={})
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     def test_webhook_success_conclusion_ignored(self, client) -> None:
         """A success conclusion returns 200 with status: ignored."""

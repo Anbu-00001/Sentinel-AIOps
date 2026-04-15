@@ -12,11 +12,26 @@ import os
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database.models import Base
+
+
+# ── SQLite WAL Mode ──────────────────────────────────────────────────────────
+# WAL (Write-Ahead Logging) allows concurrent reads while a write is in
+# progress, preventing "database is locked" errors under multi-worker setups.
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable WAL journal mode and busy timeout for every SQLite connection."""
+    import sqlite3
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")  # Wait up to 5s if locked
+        cursor.close()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 log = logging.getLogger("sentinel.database")

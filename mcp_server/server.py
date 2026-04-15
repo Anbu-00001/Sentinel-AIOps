@@ -204,24 +204,36 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
         prediction, confidence, latency,
     )
 
-    # ── Persist to database (non-blocking) ───────────────────────────────
+    # ── Persist to database (non-blocking with retry) ──────────────────
     def _save_inference():
-        try:
-            with get_session() as session:
-                entry = LogEntry(
-                    event_source="mcp",
-                    metrics_payload=features,
-                    raw_payload=dict(features),   # immutable audit copy
-                    prediction=prediction,
-                    confidence=confidence,
-                    top_features=top_features,
-                )
-                session.add(entry)
-            log.info(
-                "Inference persisted to database (prediction=%s).",
-                prediction)
-        except Exception as db_exc:
-            log.warning("DB write failed (non-fatal): %s", db_exc)
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                with get_session() as session:
+                    entry = LogEntry(
+                        event_source="mcp",
+                        metrics_payload=features,
+                        raw_payload=dict(features),   # immutable audit copy
+                        prediction=prediction,
+                        confidence=confidence,
+                        top_features=top_features,
+                    )
+                    session.add(entry)
+                log.info(
+                    "Inference persisted to database (prediction=%s).",
+                    prediction)
+                return  # Success — exit retry loop
+            except Exception as db_exc:
+                if attempt < max_retries:
+                    wait = 0.5 * (2 ** (attempt - 1))  # 0.5s, 1s, 2s
+                    log.warning(
+                        "DB write attempt %d/%d failed: %s. Retrying in %.1fs...",
+                        attempt, max_retries, db_exc, wait)
+                    time.sleep(wait)
+                else:
+                    log.error(
+                        "DB write FAILED after %d attempts: %s. Inference record lost.",
+                        max_retries, db_exc)
 
     _db_pool.submit(_save_inference)
 
@@ -235,6 +247,7 @@ def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
 # ── Entry point ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # Dual mode: MCP on stdio + optional HTTP metrics endpoint
+    import atexit
     import threading
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -255,13 +268,25 @@ if __name__ == "__main__":
         def log_message(self, format, *args) -> None:
             pass  # suppress default logging
 
+    _server_ref = {"instance": None}  # mutable container for cross-function access
+
     def _run_metrics_server() -> None:
-        server = HTTPServer(("0.0.0.0", 9090), MetricsHandler)
+        _server_ref["instance"] = HTTPServer(("0.0.0.0", 9090), MetricsHandler)
         log.info("Prometheus /metrics endpoint on http://0.0.0.0:9090/metrics")
-        server.serve_forever()
+        _server_ref["instance"].serve_forever()
+
+    def _shutdown_metrics_server() -> None:
+        """Gracefully shut down the metrics HTTP server on process exit."""
+        srv = _server_ref.get("instance")
+        if srv is not None:
+            log.info("Shutting down Prometheus metrics server...")
+            srv.shutdown()
+
+    atexit.register(_shutdown_metrics_server)
 
     metrics_thread = threading.Thread(target=_run_metrics_server, daemon=True)
     metrics_thread.start()
 
     log.info("Starting Sentinel-AIOps v3 MCP server (stdio transport).")
     mcp.run(transport="stdio")
+
