@@ -29,6 +29,10 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crypto_sig
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -295,8 +299,12 @@ def main():
 
     # Save model + label encoder
     joblib.dump(model, os.path.join(MODELS_DIR, "lgbm_model.joblib"))
+    crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
+    
     joblib.dump(le, os.path.join(MODELS_DIR, "label_encoder.joblib"))
-    log.info("Model saved: lgbm_model.joblib, label_encoder.joblib")
+    crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "label_encoder.joblib"))
+    
+    log.info("Model saved and signed: lgbm_model.joblib, label_encoder.joblib")
 
     report = generate_report(model, X_test, y_test, le)
     plot_feature_importance(model)

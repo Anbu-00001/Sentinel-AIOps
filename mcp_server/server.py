@@ -96,12 +96,24 @@ log.info(
     "Reasoning: Loading v3 model artifacts from %s at server startup.",
     MODELS_DIR)
 
+import sys
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from models import crypto_sig
+
+def _secure_load(artifact_name):
+    filepath = os.path.join(MODELS_DIR, artifact_name)
+    if not crypto_sig.verify_artifact(filepath):
+        log.error("CRITICAL: Artifact signature validation failed for %s", filepath)
+        raise SystemExit(1)
+    return joblib.load(filepath)
+
 try:
-    _model = joblib.load(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
-    _le = joblib.load(os.path.join(MODELS_DIR, "label_encoder.joblib"))
-    _scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
-    _hasher = joblib.load(os.path.join(MODELS_DIR, "hasher.joblib"))
-    _tfidf = joblib.load(os.path.join(MODELS_DIR, "tfidf.joblib"))
+    _model = _secure_load("lgbm_model.joblib")
+    _le = _secure_load("label_encoder.joblib")
+    _scaler = _secure_load("scaler.joblib")
+    _hasher = _secure_load("hasher.joblib")
+    _tfidf = _secure_load("tfidf.joblib")
     with open(os.path.join(MODELS_DIR, "feature_meta.json")) as f:
         _meta = json.load(f)
     log.info("All v3 artifacts loaded successfully.")
@@ -275,17 +287,19 @@ if __name__ == "__main__":
         log.info("Prometheus /metrics endpoint on http://0.0.0.0:9090/metrics")
         _server_ref["instance"].serve_forever()
 
-    def _shutdown_metrics_server() -> None:
+    def _shutdown_metrics_server(thread=None) -> None:
         """Gracefully shut down the metrics HTTP server on process exit."""
         srv = _server_ref.get("instance")
         if srv is not None:
             log.info("Shutting down Prometheus metrics server...")
             srv.shutdown()
-
-    atexit.register(_shutdown_metrics_server)
+            srv.server_close()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
 
     metrics_thread = threading.Thread(target=_run_metrics_server, daemon=True)
     metrics_thread.start()
+    atexit.register(_shutdown_metrics_server, thread=metrics_thread)
 
     log.info("Starting Sentinel-AIOps v3 MCP server (stdio transport).")
     mcp.run(transport="stdio")

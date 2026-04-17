@@ -1,0 +1,109 @@
+# 🛡️ Sentinel-AIOps: Senior MLOps & Security Audit
+
+Project: Sentinel-AIOps — Closed-loop MLOps Log Anomaly System
+Auditor: Senior MLOps Engineer & Security Architect
+Date: 2026-04-14
+
+---
+
+## 1. 🐛 Bug Detection
+
+| File | Issue | Severity | Detail |
+| :--- | :--- | :--- | :--- |
+| `mcp_server/server.py` | Silent Background Failures | **HIGH** | `_db_pool.submit(_save_inference)` logs errors but has no retry mechanism. If the database is locked (common in SQLite), inferences are permanently lost. |
+| `dashboard/app.py` | Heuristic Fragility | **MEDIUM** | `_map_github_to_features` uses deterministic estimates for CPU/Memory (Line 461) based on build duration. This is highly inaccurate and introduces artificial noise into the ML model's inference loop. |
+| `drift_monitor.py` | PSI Bias | **LOW** | Epsilon smoothing (1e-4) is applied before re-normalization. While it prevents crashes, it can slightly skew PSI results on extremely sparse data. |
+| `mcp_server/server.py` | Thread Lifecycle | **MEDIUM** | The `HTTPServer` for Prometheus (Line 259) runs in a daemon thread and is not gracefully joined/stopped, potentially leaving port 9090 bound during restarts. |
+
+---
+
+## 2. 🔐 Security Vulnerabilities
+
+| Category | Risk | Severity | Recommendation |
+| :--- | :--- | :--- | :--- |
+| **Authentication** | Broken Access Control | **CRITICAL** | The dashboard, API, and `/metrics` are exposed to the public internet/intranet with NO authentication. Any user can view system state or scrape business-sensitive logs. |
+| **Integrity** | Webhook Spoofing | **CRITICAL** | `github_webhook` (Line 593) doesn't verify `X-Hub-Signature-256`. An attacker can POST arbitrary failure events to skew drift metrics or trigger malicious retraining. |
+| **Execution** | Joblib Deserialization | **HIGH** | `joblib.load` uses `pickle` internally. If the `models/` directory is compromised (e.g., via a supply-chain attack or filesystem access), loading artifacts achieves **Remote Code Execution (RCE)**. |
+| **Denial of Service** | Resource Exhaustion | **MEDIUM** | FastAPI endpoints lack `PayloadSizeLimit`. Large log bursts or oversized payloads can exhaust memory on the uvicorn workers. |
+
+---
+
+## 3. 🏭 Production Readiness
+
+*   **Database Contention**: `docker-compose.yml` runs 4 workers of the dashboard. With SQLite, concurrent POSTs to `/webhook/github` will cause `sqlite3.OperationalError: database is locked` unless **WAL Mode** is explicitly enabled (it is not currently).
+*   **Version Pinning**: `requirements.txt` uses `>=` instead of `==`. This is a "time bomb" for MLOps. A minor version bump in `lightgbm` or `joblib` can cause `.joblib` artifacts to become unreadable.
+*   **Structured Logging**: The project uses standard Python `logging`. Production systems should use `structlog` or JSON formatting for ingestion into ELK/Splunk.
+
+---
+
+## 4. 🧪 Test Coverage & Quality
+
+*   **Mocking Gap**: CI tests often check for file existence rather than functional logic. `tests/test_preprocess.py` is too minimal.
+*   **Malformed Inputs**: No tests coverage exists for `mcp_server/logic.py` when keys are provided as the wrong type (e.g. `memory_usage_mb` as a string instead of float).
+*   **Drift Validation**: The drift monitor needs unit tests where PSI actually exceeds 0.2 to ensure the "Retrain Required" signal propogates to `registry.json`.
+
+---
+
+## 5. 📈 ML/Model Quality
+
+*   **Class Imbalance**: Train script `models/train_v2.py` does not use `class_weight='balanced'` in LightGBM params. Rare classes like "Security Scan Failure" likely have poor recall.
+*   **Hashing Dimension**: 64-bit hashing (`preprocess.py:72`) is dangerously low for a diverse repository landscape. Hash collisions between high-volume repos will dilute feature signals.
+*   **PSI Staticity**: The 0.2 threshold is hardcoded in `config.py`. It should be tunable based on specific environments (e.g., some CI pipelines are naturally more volatile).
+
+---
+
+## 6. 🧹 Code Quality & Maintainability
+
+*   **Magic Numbers**: Several thresholds (0.45 confidence, 100 history window) are hardcoded in `dashboard/app.py`.
+*   **Path Management**: The use of `os.path.dirname(os.path.dirname(...))` is fragile. Using a central `PATH_ROOT` in `config.py` is better.
+*   **Automation**: Missing `Makefile` or `justfile`. Re-running the pipeline requires sequential manual commands (`preprocess.py` -> `train_v2.py`).
+
+---
+
+## 📊 Grading
+
+| Dimension | Score /10 | Key Reason |
+| :--- | :--- | :--- |
+| **Security** | 3/10 | No webhook validation or dashboard auth. RCE risk via Joblib. |
+| **Production Readiness** | 5/10 | Unpinned dependencies and SQLite concurrency issues. |
+| **ML Engineering Quality** | 7/10 | Robust feature engineering but lacks imbalance handling and tuning. |
+| **Code Quality** | 8/10 | Clean, type-hinted code with clear logic decoupling. |
+| **Test Coverage** | 4/10 | Happy-path tests only; lacks edge-case and integration depth. |
+| **Architecture Design** | 9/10 | Excellent MCP/FastAPI/Prometheus integration. Local-first is well implemented. |
+| **OVERALL** | **6.0/10** | **Architecturally brilliant, but insecure/non-production ready.** |
+
+---
+
+## 🚀 Prioritized Improvement Roadmap
+
+### 🔴 Critical (Fix Before Deployment)
+
+1.  **HMAC Webhook Validation** (`dashboard/app.py`):
+    ```python
+    import hmac, hashlib
+    def verify_signature(payload: bytes, signature: str, secret: str):
+        expected = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    ```
+2.  **Enable SQLite WAL Mode** (`database/session.py`):
+    ```python
+    @event.listens_for(Engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
+    ```
+3.  **Strict Pinning** (`requirements.txt`):
+    - Change `lightgbm>=4.0` to `lightgbm==4.3.0`
+    - Change `joblib>=1.3` to `joblib==1.4.0`
+
+### 🟡 Important (First Month)
+
+1.  **Add Basic Auth**: Implement FastAPI `HTTPBasic` for the dashboard and `/metrics` port.
+2.  **LightGBM Imbalance**: Update `train_v2.py` with `LGBM_PARAMS["class_weight"] = "balanced"`.
+3.  **Hashing Expansion**: Increase `HASH_N_FEATURES` to 1024 to minimize collisions.
+
+### 🟢 Nice-to-have (Long-term)
+
+1.  **PostgreSQL Migration**: Replace SQLite for handled concurrency and better MLOps audit trails.
+2.  **Model Signature Verification**: Use `cryptography` to sign `.joblib` files to mitigate RCE risks from untrusted artifacts.

@@ -24,6 +24,10 @@ from sklearn.feature_extraction import FeatureHasher
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crypto_sig
+
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -258,8 +262,14 @@ def save_artifacts(scaler, hasher, tfidf, column_order: list, total_features: in
     """Persist fitted transformers and column metadata to /models/."""
     log.info("Reasoning: Saving fitted transformers as joblib artifacts.")
     joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler.joblib"))
+    crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "scaler.joblib"))
+    
     joblib.dump(hasher, os.path.join(MODELS_DIR, "hasher.joblib"))
+    crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "hasher.joblib"))
+    
     joblib.dump(tfidf, os.path.join(MODELS_DIR, "tfidf.joblib"))
+    crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "tfidf.joblib"))
+    
     meta = {
         "numerical_cols": NUMERICAL_COLS,
         "high_card_cols": HIGH_CARD_COLS,
@@ -277,7 +287,7 @@ def save_artifacts(scaler, hasher, tfidf, column_order: list, total_features: in
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     log.info(
-        "Artifacts written: scaler.joblib, hasher.joblib, tfidf.joblib, feature_meta.json"
+        "Artifacts written & signed: scaler, hasher, tfidf, feature_meta.json"
     )
 
 
