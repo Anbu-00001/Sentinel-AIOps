@@ -263,13 +263,13 @@ def save_artifacts(scaler, hasher, tfidf, column_order: list, total_features: in
     log.info("Reasoning: Saving fitted transformers as joblib artifacts.")
     joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler.joblib"))
     crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "scaler.joblib"))
-    
+
     joblib.dump(hasher, os.path.join(MODELS_DIR, "hasher.joblib"))
     crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "hasher.joblib"))
-    
+
     joblib.dump(tfidf, os.path.join(MODELS_DIR, "tfidf.joblib"))
     crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "tfidf.joblib"))
-    
+
     meta = {
         "numerical_cols": NUMERICAL_COLS,
         "high_card_cols": HIGH_CARD_COLS,

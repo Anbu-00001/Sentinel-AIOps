@@ -1,7 +1,7 @@
 # 🛡️ Sentinel-AIOps Mission Briefing
 
 ## 🎯 Project Mission
-**Sentinel-AIOps** is an autonomous system designed for CI/CD log anomaly detection and remediation within the Antigravity ecosystem. 
+**Sentinel-AIOps** is an autonomous system designed for CI/CD log anomaly detection and remediation within the Antigravity ecosystem.
 
 ## 🧠 Technical Core
 Our intelligence relies on Python-based Machine Learning models:

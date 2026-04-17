@@ -7,7 +7,7 @@
 
 > **Event-Driven MLOps Framework for Autonomous Log Remediation**
 
-Sentinel-AIOps transforms static CI/CD pipeline failure logs into a real-time, event-driven anomaly detection and observability platform. 
+Sentinel-AIOps transforms static CI/CD pipeline failure logs into a real-time, event-driven anomaly detection and observability platform.
 
 ## 🧠 Technical Deep-Dive (The "Why")
 

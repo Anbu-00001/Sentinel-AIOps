@@ -15,6 +15,7 @@ log = logging.getLogger("sentinel.rebuild")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
 def run_script(script_path: str):
     """Run a python script and wait for completion."""
     abs_path = os.path.join(ROOT, script_path)
@@ -27,6 +28,7 @@ def run_script(script_path: str):
         log.error("Script %s failed with exit code %d", script_path, result.returncode)
         sys.exit(result.returncode)
     log.info("Success: %s", script_path)
+
 
 def main():
     log.info("=== Starting Unified Pipeline Rebuild ===")
@@ -41,6 +43,7 @@ def main():
     run_script("models/train_v2.py")
 
     log.info("=== Pipeline Rebuild Complete. All artifacts are synchronized. ===")
+
 
 if __name__ == "__main__":
     main()

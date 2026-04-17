@@ -300,10 +300,10 @@ def main():
     # Save model + label encoder
     joblib.dump(model, os.path.join(MODELS_DIR, "lgbm_model.joblib"))
     crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "lgbm_model.joblib"))
-    
+
     joblib.dump(le, os.path.join(MODELS_DIR, "label_encoder.joblib"))
     crypto_sig.sign_artifact(os.path.join(MODELS_DIR, "label_encoder.joblib"))
-    
+
     log.info("Model saved and signed: lgbm_model.joblib, label_encoder.joblib")
 
     report = generate_report(model, X_test, y_test, le)

@@ -89,12 +89,14 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 from models import crypto_sig
 
+
 def _secure_load(artifact_name):
     filepath = os.path.join(MODELS_DIR, artifact_name)
     if not crypto_sig.verify_artifact(filepath):
         log.error("CRITICAL: Artifact signature validation failed for %s", filepath)
         raise SystemExit(1)
     return joblib.load(filepath)
+
 
 try:
     _scaler = _secure_load("scaler.joblib")
@@ -195,6 +197,7 @@ class GitHubWebhookPayload(BaseModel):
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
+
 class PayloadSizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_upload_size: int):
         super().__init__(app)
@@ -206,6 +209,7 @@ class PayloadSizeLimitMiddleware(BaseHTTPMiddleware):
             if content_length > self.max_upload_size:
                 return JSONResponse(status_code=413, content={"detail": "Payload Too Large"})
         return await call_next(request)
+
 
 app = FastAPI(
     title="Sentinel-AIOps Dashboard",
