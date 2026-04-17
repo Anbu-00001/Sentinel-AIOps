@@ -32,6 +32,8 @@ jobs:
     name: Tests (pytest)
     runs-on: ubuntu-latest
     needs: lint
+    env:
+      TESTING: "1"
     steps:
       - uses: actions/checkout@v4
 

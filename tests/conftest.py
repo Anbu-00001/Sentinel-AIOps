@@ -73,5 +73,13 @@ def synthetic_dataframe():
         "rollback_triggered": np.random.choice([True, False], num_samples),
         "incident_created": np.random.choice([True, False], num_samples),
     }
-
     return pd.DataFrame(data)
+
+
+from unittest.mock import patch, MagicMock
+
+
+@pytest.fixture(autouse=True)
+def mock_secure_load():
+    with patch("dashboard.app._secure_load", return_value=MagicMock()):
+        yield
