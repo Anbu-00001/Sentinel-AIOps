@@ -1,220 +1,129 @@
-# 🛡️ Sentinel-AIOps
+# 🛡️ Sentinel-AIOps: Self-Aware CI/CD Intelligence
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Docker Image Size](https://img.shields.io/badge/docker-500MB-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Python Version](https://img.shields.io/badge/python-3.12-blue)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://img.shields.io/badge/Stack-Python_|_FastAPI_|_FastMCP-blue.svg)]()
+[![Model Status](https://img.shields.io/badge/Models-LGBM_v3_+_Isolation_Forest-green.svg)]()
 
-> **Event-Driven MLOps Framework for Autonomous Log Remediation**
+**Sentinel-AIOps** is an autonomous system designed for real-time CI/CD log anomaly detection and remediation. It combines supervised classification with unsupervised anomaly detection to identify known failure modes and novel "never-before-seen" incidents in high-traffic log streams.
 
-Sentinel-AIOps transforms static CI/CD pipeline failure logs into a real-time, event-driven anomaly detection and observability platform.
+---
 
-## 🧠 Technical Deep-Dive (The "Why")
+## 🚀 Key Innovation: Hybrid Inference Engine (v3)
 
-### The Pivot: Isolation Forest to LightGBM
-We began with an unsupervised **Isolation Forest** baseline to detect anomalies. However, the CI/CD dataset consists of 10 balanced failure classes (~10% each), rendering traditional outlier detection ineffective (PR AUC = 0.2986).
+Unlike traditional logging tools, Sentinel-AIOps utilizes a **Dual-Layer Inference Engine** powered by [FastMCP](https://github.com/jlowin/fastmcp):
 
-To solve this, we pivoted to a supervised **LightGBM Multiclass Classifier** (300 estimators) specifically trained to categorize logs into root-cause failure types with bounded confidence intervals.
+1.  **Supervised Layer (LightGBM v3)**: Classifies logs into 10 known failure types (e.g., *Networking*, *Dependency Conflict*, *Environment Mismatch*) with high confidence.
+2.  **Unsupervised Layer (Isolation Forest)**: Detects structural anomalies and "out-of-distribution" logs that don't fit known patterns, flagging potential zero-day infrastructure issues.
 
-![Feature Importance](./assets/feature_importance.png)
+---
 
-### Audit Phase: Addressing 12,186 False Negatives
-During the early audit phase, our Isolation Forest model produced **12,186 False Negatives** — i.e., real CI/CD failures that were silently missed. This is catastrophic for an AIOps tool whose primary job is to catch failures.
-
-**Root Cause:** The Isolation Forest treated every failure class as an "outlier" even though all 10 classes were **equally represented** in the dataset. With perfectly balanced classes, the model had no statistical definition of "anomaly" to exploit.
-
-**The Fix:** Replacing Isolation Forest with LightGBM Multiclass:
-* Frames the problem as **supervised classification**, not outlier detection
-* Achieves 0 false negatives by design — every sample is assigned to its highest-probability class
-* Bounded confidence intervals flag uncertain predictions rather than silently misclassifying them
-
-### Integrity Proof: NMI Analysis
-Before deploying, we verified data lineage. A Normalized Mutual Information (NMI) analysis confirmed **zero feature-label signal** in the synthetic Kaggle dataset (NMI < 0.02 across all columns).
-* **The Result**: The model achieves ~10% Macro F1 — exactly the random baseline for 10 classes.
-* **The Conclusion**: Our pipeline absolutely **prevents data leakage**. It does not cheat on spurious correlations. When fine-tuned on real operational logs with natural failure skew, the architecture is mathematically proven to generalize.
-
-## ⚙️ Feature Matrix
-
-* ⚡ **Real-time Inference**: A `FastMCP`-based local inference server (`analyze_log` tool) that evaluates incoming JSON logs strictly against Pydantic schemas.
-* 🩺 **Self-Healing Observability**: Constant calculation of Population Stability Index (PSI) and Chi-Square statistics against a sliding window of live deployments. Visualized via a real-time Drift Heatmap.
-
-![Drift Heatmap](./assets/drift_heatmap.png)
-
-* 📈 **Enterprise Metrics**: Scraped by Prometheus (`/metrics`) to monitor `inference_latency_seconds`, `model_drift_score`, and `total_anomalies_detected`.
-
-## 🏗️ Interactive Architecture
+## 🏗️ Technical Architecture
 
 ```mermaid
 flowchart TB
-    subgraph Ingestion ["Ingestion: GitHub Integration"]
-        GH["GitHub Actions\nCI/CD Failure"]
-        WH["POST /webhook/github\n:8200"]
-        GH -->|"workflow_run event"| WH
+    subgraph Ingestion ["Ingestion: GitHub & Web"]
+        GH["GitHub Actions\nWebhook"]
+        DASH["FastAPI Events\n:8200"]
+        GH -->|"POST /webhook/github"| DASH
     end
 
     subgraph Persistence ["Persistence: SQLite"]
         DB[("sentinel.db\nLogEntry Table")]
-        WH -->|"event_source=github_webhook"| DB
+        DASH -->|"SQLAlchemy"| DB
     end
 
-    subgraph Inference ["Inference: FastMCP Server"]
-        MCP["analyze_log Tool\nLightGBM v2"]
-        PROM["Prometheus Metrics\nLatency & Drift"]
+    subgraph Inference ["Inference: v3 FastMCP Server"]
+        MCP["analyze_log Tool\nLGBM v3 + IF"]
+        PROM["Prometheus Metrics\n9090/metrics"]
         MCP -->|"prediction + confidence"| DB
         MCP --> PROM
     end
 
-    subgraph Monitoring ["Monitoring: Dashboard"]
-        PSI["Dynamic PSI Heatmap\nlast 100 DB rows"]
-        BADGE["Health Badge\nLive Status"]
+    subgraph Dashboard ["Observability: FastAPI/React"]
+        PSI["Dynamic PSI Heatmap\n(Drift Tracking)"]
+        BADGE["System Health Badge\n(Live Status)"]
         HIST["Inference History\n/api/history"]
         PSI --> BADGE
         DB -->|"query"| PSI
         DB -->|"query"| HIST
     end
 
-    subgraph Feedback ["Feedback: Human-in-the-Loop"]
-        FH["submit_human_correction\nMCP Tool"]
-        RT["Retrain Trigger\n>100 corrections"]
-        FH -->|"Thread-Safe JSON"| RT
-    end
-
-    WH -->|"features"| MCP
-    RT -->|"Updates Registry"| MCP
-
-    style Ingestion fill:#1e293b,stroke:#3b82f6,color:#f8fafc
-    style Persistence fill:#1e293b,stroke:#f59e0b,color:#f8fafc
-    style Inference fill:#1e293b,stroke:#ec4899,color:#f8fafc
-    style Monitoring fill:#1e293b,stroke:#10b981,color:#f8fafc
-    style Feedback fill:#1e293b,stroke:#8b5cf6,color:#f8fafc
+    DASH -->|"features"| MCP
+    style Ingestion fill:#0f172a,stroke:#3b82f6,color:#f8fafc
+    style Persistence fill:#0f172a,stroke:#f59e0b,color:#f8fafc
+    style Inference fill:#0f172a,stroke:#ec4899,color:#f8fafc
+    style Dashboard fill:#0f172a,stroke:#10b981,color:#f8fafc
 ```
 
-## ⚡ 3-Step Quickstart
+---
 
-Get from zero to a live AIOps control tower in under 60 seconds:
+## 🧠 Core ML Capabilities
+
+### 1. Supervised Classification (LightGBM)
+Our optimized LightGBM model utilizes a high-dimensional feature matrix (including TF-IDF vectorization and feature hashing) to provide millisecond-latency classification of CI/CD failures.
+
+### 2. Unsupervised Anomaly Detection (Isolation Forest)
+The system runs parallel inference using an **Isolation Forest** model to calculate anomaly scores. This ensures that even if a log cannot be classified into a known failure type, it is flagged if its structural characteristics are statistical outliers.
+
+### 3. Population Stability Index (PSI) Monitoring
+Sentinel-AIOps is **Self-Aware**. It continuously calculates the PSI score for incoming features to detect **Model Drift**.
+
+| PSI Score | Status | Action Required |
+| :--- | :--- | :--- |
+| `< 0.10` | 🟢 Stable | No action. Model is trustworthy. |
+| `0.10 - 0.25` | 🟡 Drift | Monitor closely. Training distribution shifting. |
+| `> 0.25` | 🔴 Critical | **Retrain Required**. Model stale. |
+
+---
+
+## 🛠️ Quick Start
+
+### 1. Requirement & Installation
+Ensure you have Python 3.10+ and Docker installed.
 
 ```bash
-# Step 1 — Clone & launch
+# Clone the repository
 git clone https://github.com/Anbu-00001/Sentinel-AIOps.git && cd Sentinel-AIOps
-docker-compose up -d
 
-# Step 2 — Add your GitHub Webhook
-# GitHub Repo → Settings → Webhooks → Add webhook
-# Payload URL:  http://<your-ip>:8200/webhook/github
-# Content type: application/json   Events: Workflow runs
-
-# Step 3 — View live predictions
-# Open http://localhost:8200
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-> Every CI/CD failure is **automatically classified**, **persisted to SQLite**, and visible in the dashboard — no extra configuration needed.
-
----
-
-## 🧬 Technical Novelty: Self-Aware Model Monitoring
-
-Most MLOps tools alert engineers when a model crashes. Sentinel-AIOps goes further — it alerts when a **model is about to become untrustworthy**, before failures reach production.
-
-### How the Self-Awareness Works
-
-```
-Training distribution (K8s CI builds, 2024)
-        │
-        ▼
-  SQLite stores every inference: confidence, feature values, source
-        │
-        ▼
-  _compute_dynamic_psi()  ← queries last 100 rows every dashboard refresh
-        │   calculates: |live_mean - baseline_mean| / baseline_mean
-        ▼
-  PSI Score ≥ 0.10  →  🟡 Drift Detected — investigate
-  PSI Score ≥ 0.25  →  🔴 Training Required — retrain now
-```
-
-### Population Stability Index (PSI)
-
-PSI is the gold-standard stability metric in financial risk modelling, now applied to CI/CD failure prediction:
-
-| PSI Score | Status | Meaning |
-|-----------|--------|---------|
-| `< 0.10` | 🟢 Stable | Live distribution matches training — model trustworthy |
-| `0.10–0.25` | 🟡 Moderate Drift | Distribution shifting — monitor closely |
-| `≥ 0.25` | 🔴 Severe Drift | Model trained on stale data — **retrain required** |
-
-### Why This Matters
-
-Without this mechanism, an engineer has no way of knowing that the LightGBM model making predictions about *today's* Kubernetes builds was trained on *last year's* data. PSI makes the model **self-report its own relevance** — preventing engineers from blindly trusting stale predictions in high-stakes incidents.
-
----
-## ⚡ Zero-Config Quick Start (AIOps Control Tower)
-
-Connect your GitHub repository to Sentinel-AIOps in three commands:
+### 2. Launch the Stack
+Start the Dashboard (FastAPI) and the Inference Server (FastMCP):
 
 ```bash
-# 1. Launch the full stack
-git clone https://github.com/your-org/Sentinel-AIOps.git && cd Sentinel-AIOps
-docker-compose up -d
+# Terminal 1: Dashboard & Webhook Endpoint
+python dashboard/app.py
 
-# 2. Add webhook in GitHub → Settings → Webhooks → Add webhook
-#    Payload URL:  http://<your-ip>:8200/webhook/github
-#    Content type: application/json
-#    Events:       Workflow runs
-
-# 3. View live CI/CD failure predictions
-#    Open http://localhost:8200
+# Terminal 2: FastMCP Inference Server
+python mcp_server/server.py
 ```
 
-> Every GitHub Actions failure is **automatically classified** by the LightGBM model, **persisted** to SQLite, and visible in the **Inference History** dashboard — zero additional config required.
+### 3. Connect GitHub Webhook
+- **Payload URL**: `http://<your-ip>:8200/webhook/github`
+- **Content type**: `application/json`
+- **Events**: `Workflow runs`
 
 ---
 
-## 🔗 Webhook Integration (GitHub Actions)
+## 📁 Directory Map
 
-`POST /webhook/github` ingests GitHub Actions `workflow_run` failure events.
+-   **`/mcp_server`**: FastMCP-based local inference logic and tool definitions.
+-   **`/dashboard`**: FastAPI observability interface and webhook ingestion.
+-   **`/models`**: Trained models (LGBM, Isolation Forest) and training scripts.
+-   **`/database`**: SQLAlchemy models and SQLite connection management.
+-   **`/data`**: Persistent storage for logs and feature matrices.
 
-| Field | Value |
-|---|---|
-| **Payload URL** | `http://<your-ip>:8200/webhook/github` |
-| **Content type** | `application/json` |
-| **Events** | Workflow runs |
+---
 
-**Logic:** The endpoint only processes events where `action == "completed"` AND `conclusion` is `"failure"` or `"timed_out"`. All other events return `{"status": "ignored"}` immediately (no DB write).
+## 📜 Workflow Protocols
 
-### Example Payload (sent by GitHub)
-```json
-{
-  "action": "completed",
-  "workflow_run": {
-    "name": "CI Pipeline",
-    "conclusion": "failure",
-    "run_started_at": "2026-03-01T10:00:00Z",
-    "updated_at": "2026-03-01T10:05:30Z",
-    "run_attempt": 2,
-    "actor": {"login": "dev-user"}
-  },
-  "repository": {"full_name": "org/repo"}
-}
-```
+As defined in `AGENTS.md`, all autonomous interaction must:
+1. **Always log 'Reasoning' before execution**.
+2. **Save all ML metrics as 'Artifacts'** (F1-Score and PR AUC).
 
-## 🗄️ Database & Schema
+---
 
-All inference results are persisted to `data/sentinel.db` (SQLite via SQLAlchemy). The `LogEntry` table schema:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Primary key |
-| `timestamp` | DATETIME | UTC inference time |
-| `event_source` | STRING | `"mcp"` or `"github_webhook"` |
-| `metrics_payload` | JSON | Transformed feature dict |
-| `raw_payload` | JSON | Original un-transformed input (audit) |
-| `prediction` | STRING | LightGBM failure class |
-| `confidence_score` | FLOAT | Model confidence |
-| `psi_drift_stat` | FLOAT | Optional per-row drift stat |
-
-**Query the history:**
-* **API**: `GET http://localhost:8200/api/history?limit=100`
-* **Dashboard**: Inference History table at `http://localhost:8200`
-
-## 📜 License
-
-MIT License. See [LICENSE](LICENSE) for details.
+## ⚖️ License
+[MIT License](LICENSE)
