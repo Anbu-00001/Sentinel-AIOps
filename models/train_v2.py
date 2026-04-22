@@ -133,9 +133,11 @@ def train_lgbm(X_train, y_train, X_test, y_test, feature_names):
 def generate_report(model, X_test, y_test, le):
     """Generate per-class classification report and save as JSON artifact."""
     log.info(
-        "Reasoning: Generating classification report (precision, recall, F1 per class)."
+        "Reasoning: Generating classification report (precision, recall, F1, PR AUC per class)."
     )
     y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)
+
     report = classification_report(
         y_test,
         y_pred,
@@ -143,6 +145,15 @@ def generate_report(model, X_test, y_test, le):
         output_dict=True,
         zero_division=0,
     )
+
+    from sklearn.preprocessing import LabelBinarizer
+    from sklearn.metrics import average_precision_score
+    lb = LabelBinarizer()
+    lb.fit(y_test)
+    y_test_bin = lb.transform(y_test)
+
+    macro_pr_auc = average_precision_score(y_test_bin, y_proba, average="macro")
+    report["macro avg"]["pr_auc"] = macro_pr_auc
 
     report_path = os.path.join(MODELS_DIR, "v2_report.json")
     with open(report_path, "w") as f:
@@ -256,6 +267,7 @@ def update_registry(report, model):
         "macro_f1": round(macro["f1-score"], 4),
         "macro_precision": round(macro["precision"], 4),
         "macro_recall": round(macro["recall"], 4),
+        "macro_pr_auc": round(macro.get("pr_auc", 0.0), 4),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "artifacts": [
             "lgbm_model.joblib",

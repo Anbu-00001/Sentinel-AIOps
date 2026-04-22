@@ -13,7 +13,16 @@ Workflow Rules (AGENTS.md):
   - Serve all inference via local-first FastMCP.
 """
 
-from .logic import validate_input, run_prediction
+import os
+import sys
+
+# ── Paths & Sys Path Initialization ─────────────────────────────────────
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(ROOT, "models")
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from mcp_server.logic import validate_input, run_prediction
 from prometheus_client import (
     Counter,
     Gauge,
@@ -27,7 +36,6 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict
 from concurrent.futures import ThreadPoolExecutor
 
 # Global thread pool for offloading database I/O
@@ -41,10 +49,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("sentinel.mcp_server")
-
-# ── Paths ───────────────────────────────────────────────────────────────
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS_DIR = os.path.join(ROOT, "models")
 
 # ── Prometheus metrics ──────────────────────────────────────────────────
 INFERENCE_LATENCY = Histogram(
@@ -96,9 +100,6 @@ log.info(
     "Reasoning: Loading v3 model artifacts from %s at server startup.",
     MODELS_DIR)
 
-import sys
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
 from models import crypto_sig
 
 
@@ -165,7 +166,7 @@ def get_prometheus_metrics() -> str:
 # ── MCP Tool ────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def analyze_log(features: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_log(features: dict) -> dict:
     """
     Classify a CI/CD log record into one of 10 failure types.
 
