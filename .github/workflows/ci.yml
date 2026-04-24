@@ -47,7 +47,7 @@ jobs:
           pip install --upgrade pip
           pip install pandas numpy scipy scikit-learn lightgbm joblib \
                       prometheus_client pydantic mcp pytest \
-                      sqlalchemy httpx fastapi uvicorn httpx
+                      sqlalchemy httpx fastapi uvicorn python-multipart
 
 
 

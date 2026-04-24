@@ -148,6 +148,8 @@ class LogHistoryEntry(BaseModel):
 class DashboardData(BaseModel):
     """Complete dashboard payload."""
 
+    model_config = {"protected_namespaces": ()}
+
     health: HealthStatus
     drift_heatmap: list[DriftHeatmapEntry]
     model_version: Optional[str] = None
@@ -185,16 +187,25 @@ class PayloadSizeLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan_handler(app: FastAPI):
+    load_artifacts()
+    yield
+
+
 app = FastAPI(
     title="Sentinel-AIOps Dashboard",
     description="Observability dashboard for CI/CD anomaly detection platform.",
     version="2.0.0",
+    lifespan=lifespan_handler,
 )
 
 app.add_middleware(PayloadSizeLimitMiddleware, max_upload_size=2_000_000)
 
 
-@app.on_event("startup")
 def load_artifacts():
     global _scaler, _model, _le, _hasher, _tfidf, _meta, _feature_names, _BASELINE_MEANS, _INFERENCE_READY
     try:
