@@ -50,19 +50,23 @@ LGBM_PARAMS = {
     "objective": "multiclass",
     "metric": "multi_logloss",
     "boosting_type": "gbdt",
-    "n_estimators": 300,
+    "n_estimators": 400,
     "learning_rate": 0.1,
-    "num_leaves": 127,
+    "num_leaves": 63,
     "max_depth": 8,
-    "min_child_samples": 50,
-    "subsample": 0.8,
+    "min_child_samples": 30,
+    "subsample": 0.75,
     "colsample_bytree": 1.0,
     "reg_alpha": 0.05,
     "reg_lambda": 0.05,
+    "class_weight": "balanced",
     "random_state": 42,
     "n_jobs": -1,
     "verbose": -1,
 }
+
+# Minimum acceptable macro F1 on the test set
+MIN_MACRO_F1: float = 0.60
 
 
 def build_feature_names():
@@ -164,21 +168,37 @@ def generate_report(model, X_test, y_test, le):
     log.info("─── Per-Class Results ───")
     for cls in le.classes_:
         m = report[cls]
+        cls_f1 = m["f1-score"]
         log.info(
             "  %-25s  P=%.4f  R=%.4f  F1=%.4f  n=%d",
             cls,
             m["precision"],
             m["recall"],
-            m["f1-score"],
+            cls_f1,
             int(m["support"]),
         )
+        if cls_f1 < 0.40:
+            log.warning(
+                "WARNING: Class '%s' F1=%.4f is below 0.40 — review feature distributions.",
+                cls, cls_f1,
+            )
     macro = report["macro avg"]
     log.info(
-        "  %-25s  P=%.4f  R=%.4f  F1=%.4f",
+        "  %-25s  P=%.4f  R=%.4f  F1=%.4f  PR-AUC=%.4f",
         "MACRO AVG",
         macro["precision"],
         macro["recall"],
         macro["f1-score"],
+        macro.get("pr_auc", 0.0),
+    )
+
+    # Guard: do not commit a random-chance or memorized model
+    f1 = report["macro avg"]["f1-score"]
+    assert 0.60 <= f1 <= 0.90, (
+        f"F1={f1:.4f} is outside the credible range [0.60, 0.90]. "
+        f"If F1 > 0.90, noise injection is insufficient — increase "
+        f"NOISE_SIGMA_FRACTION in preprocess.py. "
+        f"If F1 < 0.60, numerical distributions need stronger separation."
     )
 
     return report

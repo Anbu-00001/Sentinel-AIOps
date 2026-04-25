@@ -29,20 +29,20 @@
   "hash_n_features": 64,
   "tfidf_max_features": 500,
   "dummy_column_order": [
-    "ci_tool_CircleCI",
     "ci_tool_GitHub Actions",
     "ci_tool_GitLab CI",
     "ci_tool_Jenkins",
+    "ci_tool_Travis CI",
     "language_Go",
     "language_Java",
-    "language_NodeJS",
+    "language_JavaScript",
     "language_Python",
     "language_Rust",
-    "os_ubuntu-latest",
-    "os_windows-latest",
+    "os_Windows",
+    "os_macOS",
     "cloud_provider_Azure",
     "cloud_provider_GCP",
-    "cloud_provider_On-Prem",
+    "cloud_provider_On-Premise",
     "failure_stage_deploy",
     "failure_stage_test",
     "severity_HIGH",
@@ -50,5 +50,5 @@
     "severity_MEDIUM"
   ],
   "total_features": 592,
-  "artifacts_timestamp": "2026-04-17T13:44:32.889964"
+  "artifacts_timestamp": "2026-04-25T12:07:22.145329"
 }

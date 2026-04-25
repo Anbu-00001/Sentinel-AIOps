@@ -1,7 +1,21 @@
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
+"""
+conftest.py — Sentinel-AIOps Test Configuration
+=================================================
+Sets up environment and fixtures for the test suite.
+
+IMPORTANT: os.environ["TESTING"] must be set BEFORE any project imports
+so that models/crypto_sig.py uses the test-only fallback secret.
+"""
+
+import os
+
+# ── Environment setup (must precede ALL project imports) ─────────────────────
+os.environ["TESTING"] = "1"
+
+import pytest  # noqa: E402
+import pandas as pd  # noqa: E402
+import numpy as np  # noqa: E402
+from datetime import datetime, timedelta  # noqa: E402
 
 
 @pytest.fixture
@@ -76,7 +90,7 @@ def synthetic_dataframe():
     return pd.DataFrame(data)
 
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

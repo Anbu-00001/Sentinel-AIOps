@@ -31,9 +31,19 @@ data/*.db
 # Ignore scikit-learn/LightGBM joblib artifacts (~100MB+)
 models/*.joblib
 
-# Ignore runtime reports (optional, uncomment if you want them tracked)
-# models/*.json
-# models/*.png
+# ── Runtime ML outputs (generated, not source) ──────────────────────────────
+models/drift_report.json
+models/anomaly_scores.npy
+models/pr_curve.png
+models/confusion_matrix.png
+models/feature_importance.png
+models/*.sig
+models/v2_report.json
+models/metrics.json
+
+# Keep these tracked (they are source/config, not runtime outputs):
+# models/feature_meta.json  ← this IS source, keep tracked
+# models/registry.json      ← clean-slate committed, populated at train time
 
 # Ignore human log subsets
 data/feedback/*.json

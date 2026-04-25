@@ -1,0 +1,43 @@
+FROM python:3.12-slim
+
+LABEL maintainer="sentinel-aiops" \
+      description="Sentinel-AIOps Observability Dashboard & Webhook Receiver"
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy ALL modules needed by dashboard.app imports:
+#   - database/ (LogEntry, get_session, init_db)
+#   - config.py (PSI thresholds, RETRAIN_THRESHOLD)
+#   - mcp_server/ (mcp_server.logic.run_prediction)
+#   - models/ (crypto_sig, feature_meta.json, trained artifacts)
+#   - dashboard/ (the application itself)
+#   - data/ (SQLite DB, feedback files)
+COPY models/ ./models/
+COPY mcp_server/ ./mcp_server/
+COPY database/ ./database/
+COPY dashboard/ ./dashboard/
+COPY scripts/ ./scripts/
+COPY data/ ./data/
+COPY config.py ./config.py
+
+# Expose dashboard port
+EXPOSE 8200
+
+# Health check using stdlib
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')" || exit 1
+
+# workers=1 for SQLite safety — SQLite does not support concurrent writers,
+# and multiple uvicorn workers would each hold separate connections, risking
+# "database is locked" errors under write contention.
+CMD ["python", "-m", "uvicorn", "dashboard.app:app", \
+     "--host", "0.0.0.0", "--port", "8200", "--workers", "1"]

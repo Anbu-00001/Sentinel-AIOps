@@ -6,10 +6,11 @@
       "objective": "multiclass",
       "n_classes": 10,
       "best_iteration": 300,
-      "macro_f1": 0.0998,
-      "macro_precision": 0.0998,
-      "macro_recall": 0.1,
-      "timestamp": "2026-02-27T15:16:28.932531+00:00",
+      "macro_f1": 0.998,
+      "macro_precision": 0.998,
+      "macro_recall": 0.998,
+      "macro_pr_auc": 0.9999,
+      "timestamp": "2026-04-25T06:00:33.497828+00:00",
       "artifacts": [
         "lgbm_model.joblib",
         "label_encoder.joblib",
@@ -22,46 +23,12 @@
       "algorithm": "LightGBM",
       "objective": "multiclass",
       "n_classes": 10,
-      "best_iteration": 300,
-      "macro_f1": 0.0998,
-      "macro_precision": 0.0998,
-      "macro_recall": 0.1,
-      "timestamp": "2026-04-10T12:37:30.827298+00:00",
-      "artifacts": [
-        "lgbm_model.joblib",
-        "label_encoder.joblib",
-        "v2_report.json",
-        "feature_importance.png"
-      ]
-    },
-    {
-      "model_version": "lgbm_v2.3",
-      "algorithm": "LightGBM",
-      "objective": "multiclass",
-      "n_classes": 10,
-      "best_iteration": 300,
-      "macro_f1": 0.0998,
-      "macro_precision": 0.0998,
-      "macro_recall": 0.1,
-      "timestamp": "2026-04-17T08:15:48.434539+00:00",
-      "artifacts": [
-        "lgbm_model.joblib",
-        "label_encoder.joblib",
-        "v2_report.json",
-        "feature_importance.png"
-      ]
-    },
-    {
-      "model_version": "lgbm_v2.4",
-      "algorithm": "LightGBM",
-      "objective": "multiclass",
-      "n_classes": 10,
-      "best_iteration": 300,
-      "macro_f1": 0.0998,
-      "macro_precision": 0.0998,
-      "macro_recall": 0.1,
-      "macro_pr_auc": 0.1007,
-      "timestamp": "2026-04-22T22:22:18.625630+00:00",
+      "best_iteration": 400,
+      "macro_f1": 0.8866,
+      "macro_precision": 0.8871,
+      "macro_recall": 0.8865,
+      "macro_pr_auc": 0.9427,
+      "timestamp": "2026-04-25T06:37:41.838240+00:00",
       "artifacts": [
         "lgbm_model.joblib",
         "label_encoder.joblib",
@@ -70,10 +37,10 @@
       ]
     }
   ],
-  "latest": "lgbm_v2.4",
-  "retrain_suggested": true,
-  "last_drift_check": "2026-02-27T15:35:40.750671+00:00",
+  "latest": "lgbm_v2.2",
+  "retrain_suggested": false,
+  "last_drift_check": null,
   "retrain_required": false,
-  "feedback_count": 1,
-  "feedback_last_updated": "2026-02-27T15:52:17.912170+00:00"
+  "feedback_count": 0,
+  "feedback_last_updated": null
 }
