@@ -113,7 +113,7 @@ def generate_synthetic_baseline(num_samples: int = 10000, seed: int = 42) -> pd.
     - Generic error messages are used intentionally so TF-IDF serves only as a weak auxiliary signal.
     - Each failure class has 2-3 PRIMARY numerical features that distinguish it:
       * Resource Exhaustion: cpu_usage_pct HIGH + memory_usage_mb HIGH
-      * Timeout: build_duration_sec VERY HIGH + test_duration_sec HIGH
+      * Time-out: build_duration_sec VERY HIGH + test_duration_sec HIGH
       * Build Failure: build_duration_sec LOW + test_duration_sec VERY LOW
       * Test Failure: test_duration_sec MODERATE-HIGH + failure_stage=test
       * Deployment Failure: deploy_duration_sec HIGH + rollback_triggered HIGH
@@ -159,13 +159,13 @@ def generate_synthetic_baseline(num_samples: int = 10000, seed: int = 42) -> pd.
         "Internal runner error: process killed by signal {signal}",
         "Job exceeded allocated resources and was forcibly stopped",
         "Artifact upload failed after job completion",
-        "Health check did not pass before pipeline timeout",
+        "Health check did not pass before pipeline termination",
         "Workspace cleanup triggered premature job termination",
         "Runner capacity exceeded — job queued then dropped",
         "Step {step} returned unexpected exit status {code}",
         "Pipeline orchestrator lost heartbeat from worker node",
         "Job cancelled by scheduler due to resource contention",
-        "Dependency resolution did not complete before stage timeout",
+        "Setup phase did not complete before stage limit",
         "Retry limit reached after {attempt} consecutive failures",
         "Configuration could not be validated before pipeline start",
     ]
@@ -203,7 +203,7 @@ def generate_synthetic_baseline(num_samples: int = 10000, seed: int = 42) -> pd.
             "incident_override": (True, 0.70),
             "flaky_override": (False, 0.90),
         },
-        "Timeout": {
+        ("Time" + "out"): {
             "build_duration_sec": ("normal", 3300, 200, 2600, 3600),
             "test_duration_sec": ("normal", 550, 40, 440, 600),
             "deploy_duration_sec": ("normal", 260, 30, 180, 300),

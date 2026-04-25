@@ -13,12 +13,13 @@ joblib==1.5.3
 matplotlib==3.10.8
 
 # ── Web Framework ────────────────────────────────────────────────────
-fastapi==0.109.2
-uvicorn==0.27.1
+fastapi==0.136.1
+uvicorn==0.46.0
 python-multipart==0.0.21
+starlette==1.0.0
 
 # ── Validation & Serialization ───────────────────────────────────────
-pydantic==2.6.1
+pydantic==2.13.3
 
 # ── MCP Protocol ─────────────────────────────────────────────────────
 mcp==1.26.0
