@@ -156,3 +156,211 @@ class TestWebhookToSQLToDashboard:
         assert (
             latest.get("raw_payload") is not None
         ), "webhook entries must have raw_payload for audit"
+
+
+class TestWebhookDatabasePersistence:
+    """
+    Verifies that POST /webhook/github correctly persists a LogEntry
+    to the database with all required fields populated.
+    Tests DB state directly via SQLAlchemy, not via HTTP endpoints.
+    """
+
+    FAILURE_PAYLOAD = {
+        "action": "completed",
+        "repository": {"full_name": "org/db-persistence-test"},
+        "workflow_run": {
+            "name": "DB Persistence CI",
+            "conclusion": "failure",
+            "run_started_at": "2026-04-01T10:00:00Z",
+            "updated_at":     "2026-04-01T10:08:00Z",
+            "run_attempt": 2,
+            "actor": {"login": "test-bot"},
+            "head_repository": {"language": "Python"},
+        },
+    }
+
+    def test_webhook_creates_db_row(self, client) -> None:
+        """Posting a failure webhook must create exactly one LogEntry row."""
+        from database import get_session
+        from database.models import LogEntry
+
+        with get_session() as session:
+            before_count = session.query(LogEntry).filter(
+                LogEntry.event_source == "github_webhook"
+            ).count()
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            after_count = session.query(LogEntry).filter(
+                LogEntry.event_source == "github_webhook"
+            ).count()
+
+        assert after_count == before_count + 1, (
+            f"Expected {before_count + 1} webhook rows, got {after_count}"
+        )
+
+    def test_webhook_row_has_correct_event_source(self, client) -> None:
+        """LogEntry created by webhook must have event_source=github_webhook."""
+        from database import get_session
+        from database.models import LogEntry
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert latest.event_source == "github_webhook"
+
+    def test_webhook_row_has_non_null_raw_payload(self, client) -> None:
+        """LogEntry raw_payload must not be null — required for audit trail."""
+        from database import get_session
+        from database.models import LogEntry
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert latest.raw_payload is not None, (
+                "raw_payload is None — webhook audit trail is broken"
+            )
+            assert isinstance(latest.raw_payload, dict)
+
+    def test_webhook_row_metrics_payload_has_required_keys(
+        self, client
+    ) -> None:
+        """metrics_payload must contain all 6 numerical telemetry fields."""
+        from database import get_session
+        from database.models import LogEntry
+
+        REQUIRED_METRICS = {
+            "build_duration_sec",
+            "test_duration_sec",
+            "deploy_duration_sec",
+            "cpu_usage_pct",
+            "memory_usage_mb",
+            "retry_count",
+        }
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert latest.metrics_payload is not None
+            missing = REQUIRED_METRICS - set(latest.metrics_payload.keys())
+            assert not missing, (
+                f"metrics_payload missing required fields: {missing}"
+            )
+
+    def test_webhook_row_confidence_is_valid_float(self, client) -> None:
+        """confidence field must be a float in [0.0, 1.0] or 0.0 if queued."""
+        from database import get_session
+        from database.models import LogEntry
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert isinstance(latest.confidence, float), (
+                f"confidence must be float, got {type(latest.confidence)}"
+            )
+            assert 0.0 <= latest.confidence <= 1.0, (
+                f"confidence {latest.confidence} is outside [0.0, 1.0]"
+            )
+
+    def test_webhook_row_prediction_is_non_empty_string(
+        self, client
+    ) -> None:
+        """prediction field must be a non-empty string."""
+        from database import get_session
+        from database.models import LogEntry
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert isinstance(latest.prediction, str)
+            assert len(latest.prediction) > 0, (
+                "prediction is an empty string"
+            )
+
+    def test_webhook_row_timestamp_is_populated(self, client) -> None:
+        """timestamp must be auto-populated and not null."""
+        from database import get_session
+        from database.models import LogEntry
+        from datetime import datetime
+
+        client.post("/webhook/github", json=self.FAILURE_PAYLOAD)
+
+        with get_session() as session:
+            latest = (
+                session.query(LogEntry)
+                .filter(LogEntry.event_source == "github_webhook")
+                .order_by(LogEntry.timestamp.desc())
+                .first()
+            )
+
+            assert latest is not None
+            assert latest.timestamp is not None
+            assert isinstance(latest.timestamp, datetime)
+
+    def test_timed_out_conclusion_also_persists(self, client) -> None:
+        """timed_out conclusion must also create a DB row."""
+        from database import get_session
+        from database.models import LogEntry
+
+        payload = {
+            "action": "completed",
+            "workflow_run": {
+                "conclusion": "timed_out",
+                "run_attempt": 4,
+            },
+        }
+
+        with get_session() as session:
+            before = session.query(LogEntry).filter(
+                LogEntry.event_source == "github_webhook"
+            ).count()
+
+        client.post("/webhook/github", json=payload)
+
+        with get_session() as session:
+            after = session.query(LogEntry).filter(
+                LogEntry.event_source == "github_webhook"
+            ).count()
+
+        assert after == before + 1

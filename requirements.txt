@@ -1,3 +1,9 @@
+# Sentinel-AIOps pinned dependencies
+# Generated from: pip freeze on Python 3.12
+# To update: pip install -U <package> then update version here.
+# Never use >= in this file — unpinned deps break reproducibility.
+
+# ── Data & ML ────────────────────────────────────────────────────────
 pandas==2.3.3
 numpy==2.4.1
 scipy==1.17.0
@@ -5,10 +11,23 @@ scikit-learn==1.8.0
 lightgbm==4.6.0
 joblib==1.5.3
 matplotlib==3.10.8
-fastapi>=0.109.2
-uvicorn>=0.31.1
+
+# ── Web Framework ────────────────────────────────────────────────────
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.21
+
+# ── Validation & Serialization ───────────────────────────────────────
+pydantic==2.6.1
+
+# ── MCP Protocol ─────────────────────────────────────────────────────
 mcp==1.26.0
+
+# ── Observability ────────────────────────────────────────────────────
 prometheus_client==0.24.1
-pydantic>=2.11.0
+
+# ── Database ─────────────────────────────────────────────────────────
 sqlalchemy==2.0.25
-httpx>=0.27.2
+
+# ── HTTP Client (testing) ────────────────────────────────────────────
+httpx==0.27.2

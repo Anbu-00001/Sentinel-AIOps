@@ -74,10 +74,23 @@ TEXT_COL = "error_message"
 LABEL_COL = "failure_type"
 
 HASH_N_FEATURES = 64  # bits for FeatureHasher (power-of-2 preferred)
-TFIDF_MAX_FEATURES = 500
+TFIDF_MAX_FEATURES = 600
 
 
-NOISE_SIGMA_FRACTION = 0.45
+# Per-feature noise sigma fractions.
+# deploy_duration_sec uses a smaller fraction because its
+# physical range (5-300s) is narrow relative to class means
+# near the upper boundary. Global sigma would cause >25% of
+# rows to hit the 300s clip ceiling.
+FEATURE_NOISE_SIGMA = {
+    "build_duration_sec": 0.65,
+    "test_duration_sec": 0.65,
+    "deploy_duration_sec": 0.12,   # narrow range, reduce noise
+    "cpu_usage_pct": 0.65,
+    "memory_usage_mb": 0.65,
+    "retry_count": 0.40,   # discrete int, less noise
+}
+
 CLIP_BOUNDS = {
     "build_duration_sec": (10, 3600),
     "test_duration_sec": (5, 600),
@@ -341,10 +354,7 @@ def generate_synthetic_baseline(num_samples: int = 10000, seed: int = 42) -> pd.
         sev_opts, sev_weights = spec["severity"]
         row["severity"] = np.random.choice(sev_opts, n, p=sev_weights)
 
-        # Error messages from shared generic pool
-        row["error_message"] = np.array([
-            _make_error_message() for _ in range(n)
-        ])
+        # Error messages will be generated globally later
 
         # Boolean overrides
         if "rollback_override" in spec:
@@ -392,20 +402,24 @@ def generate_synthetic_baseline(num_samples: int = 10000, seed: int = 42) -> pd.
 
     df = pd.concat(frames, ignore_index=True)
 
-    log.info("Reasoning: Injecting Gaussian noise to numerical features (%.2f%% of std) and re-clipping.", NOISE_SIGMA_FRACTION * 100)
-    for feature in NUMERICAL_COLS:
-        sigma = df[feature].std() * NOISE_SIGMA_FRACTION
-        noise = np.random.normal(0, sigma, size=len(df))
-        df[feature] = df[feature] + noise
+    log.info("Reasoning: Injecting per-feature Gaussian noise and re-clipping.")
+    for feat, sigma_frac in FEATURE_NOISE_SIGMA.items():
+        sigma = df[feat].std() * sigma_frac
+        rng_noise = np.random.default_rng(seed + hash(feat) & 0xFFFF)
+        noise = rng_noise.normal(0, sigma, size=len(df))
+        df[feat] = df[feat] + noise
 
         # Re-clip to physical bounds
-        lo, hi = CLIP_BOUNDS[feature]
-        df[feature] = df[feature].clip(lo, hi)
-        if feature != "cpu_usage_pct":
-            df[feature] = np.round(df[feature]).astype(int)
+        lo, hi = CLIP_BOUNDS[feat]
+        df[feat] = df[feat].clip(lo, hi)
+        if feat != "cpu_usage_pct":
+            df[feat] = np.round(df[feat]).astype(int)
 
     log.info("Reasoning: Shuffling final dataset.")
     df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+    log.info("Reasoning: Generating error_message for all rows from a single global sequence.")
+    df["error_message"] = [_make_error_message() for _ in range(len(df))]
     log.info("Synthetic baseline generated: %d rows × %d columns.", df.shape[0], df.shape[1])
     return df
 
@@ -494,8 +508,10 @@ def build_feature_matrix(
         TFIDF_MAX_FEATURES,
     )
     texts = df[TEXT_COL].fillna("").astype(str)
+    from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+    custom_stop_words = list(ENGLISH_STOP_WORDS.union({"job", "step", "runner", "pipeline", "process", "error"}))
     if fit:
-        tfidf = TfidfVectorizer(max_features=TFIDF_MAX_FEATURES, sublinear_tf=True)
+        tfidf = TfidfVectorizer(max_features=TFIDF_MAX_FEATURES, sublinear_tf=True, stop_words=custom_stop_words)
         X_text = tfidf.fit_transform(texts)
     else:
         X_text = tfidf.transform(texts)

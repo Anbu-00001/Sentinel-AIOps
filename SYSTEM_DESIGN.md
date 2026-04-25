@@ -34,10 +34,10 @@ flowchart TB
     end
 
     subgraph Feedback ["Feedback: Human-in-the-Loop"]
-        FH["Feedback Handler\nsubmit_human_correction"]
-        LBL["labels.json\nThread-Safe Store"]
+        FE["Feedback Engine\nsubmit_ground_truth"]
+        LBL["human_labels.json\nThread-Safe Store"]
         RT["Retrain Trigger\ncount > 100"]
-        FH --> LBL --> RT
+        FE --> LBL --> RT
     end
 
     subgraph Dashboard ["Dashboard: Next.js UI"]
@@ -107,21 +107,21 @@ flowchart LR
 | Numerical | PSI (Population Stability Index) | > 0.2 → retrain |
 | Categorical | Chi-Square test | p < 0.05 → drifted |
 
-### 5. Feedback Loop (`/mcp-server/feedback_handler.py`)
+### 5. Feedback Loop (`/mcp-server/feedback_engine.py`)
 
 ```mermaid
 sequenceDiagram
     participant User as Human Reviewer
-    participant FH as Feedback Handler
-    participant FS as labels.json
+    participant FE as Feedback Engine
+    participant FS as human_labels.json
     participant REG as registry.json
 
-    User->>FH: submit_human_correction(log_id, label)
-    FH->>FH: Pydantic validation
-    FH->>FS: Thread-safe append
-    FH->>REG: Update count
+    User->>FE: submit_ground_truth(log_id, label)
+    FE->>FE: Pydantic validation
+    FE->>FS: Thread-safe append
+    FE->>REG: Update count
     alt count > 100
-        FH->>REG: retrain_required = true
+        FE->>REG: retrain_required = true
         REG-->>User: ⚠️ Retrain triggered
     end
 ```
@@ -168,5 +168,5 @@ flowchart LR
                                       ↓               ↓
                                   Dashboard ←── drift_report.json
                                       ↑
-                              Feedback Handler ← Human Corrections
+                              Feedback Engine  ← Human Corrections
 ```
