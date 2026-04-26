@@ -48,8 +48,14 @@ jobs:
           pip install pandas numpy scipy scikit-learn lightgbm joblib \
                       prometheus_client pydantic mcp pytest \
                       sqlalchemy httpx fastapi uvicorn python-multipart
-
-
+      - name: Train model pipeline (generates artifacts for ablation)
+        run: |
+          CI=1 TESTING=1 python models/preprocess.py
+          TESTING=1 python models/train_v2.py
+        env:
+          MODEL_SIGNATURE_SECRET: ${{ secrets.MODEL_SIGNATURE_SECRET }}
+          TESTING: "1"
+          CI: "1"
 
       - name: Verify environment configuration
         run: |

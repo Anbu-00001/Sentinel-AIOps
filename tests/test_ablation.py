@@ -42,14 +42,37 @@ def ablation_results():
     statistically meaningful for the threshold checks.
     """
     import joblib
+    import os
+    MODELS_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "models"
+    )
+    REQUIRED_ARTIFACTS = [
+        "scaler.joblib",
+        "hasher.joblib",
+        "tfidf.joblib",
+        "lgbm_model.joblib",
+        "label_encoder.joblib",
+        "feature_meta.json",
+    ]
+    missing = [
+        a for a in REQUIRED_ARTIFACTS
+        if not os.path.exists(os.path.join(MODELS_DIR, a))
+    ]
+    if missing:
+        pytest.skip(
+            f"Ablation test requires trained model artifacts. "
+            f"Missing: {missing}. "
+            f"Run 'make train' first, then re-run this test. "
+            f"In CI, add a training step before pytest in ci.yml."
+        )
+
     import lightgbm as lgb
     import pandas as pd
     from scipy.sparse import hstack, csr_matrix
     from sklearn.model_selection import StratifiedShuffleSplit
     from sklearn.preprocessing import LabelEncoder
     from sklearn.metrics import f1_score
-
-    MODELS_DIR = os.path.join(ROOT, "models")
 
     # Load fitted transformers from Sprint 1/2 pipeline
     scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
