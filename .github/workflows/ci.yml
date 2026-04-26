@@ -67,7 +67,7 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short
 
   lint-quality:
     name: Lint & Code Quality
