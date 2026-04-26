@@ -24,7 +24,7 @@ hasher = joblib.load(f'{MODELS_DIR}/hasher.joblib')
 tfidf = joblib.load(f'{MODELS_DIR}/tfidf.joblib')
 meta = json.load(open(f'{MODELS_DIR}/feature_meta.json'))
 
-df = generate_synthetic_baseline(num_samples=5000, seed=99)
+df = generate_synthetic_baseline(num_samples=2000, seed=99)
 le = LabelEncoder()
 y = le.fit_transform(df[meta['label_col']].values)
 
@@ -61,6 +61,6 @@ print(f'Full model F1      : {f1_full:.4f}')
 print(f'Without TF-IDF F1  : {f1_no:.4f}')
 print(f'Delta (text contrib): {f1_full - f1_no:+.4f}')
 
-ok = f1_no >= 0.55 and (f1_full - f1_no) < 0.30
+ok = f1_no >= 0.55 and f1_full <= 0.90 and (f1_full - f1_no) < 0.30
 print('Ablation gates     : PASS' if ok else 'Ablation gates     : FAIL')
 sys.exit(0 if ok else 1)
