@@ -50,7 +50,7 @@ LGBM_PARAMS = {
     "objective": "multiclass",
     "metric": "multi_logloss",
     "boosting_type": "gbdt",
-    "n_estimators": 400,
+    "n_estimators": 120,
     "learning_rate": 0.1,
     "num_leaves": 63,
     "max_depth": 8,

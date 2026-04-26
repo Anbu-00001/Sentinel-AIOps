@@ -1,24 +1,6 @@
 {
   "models": [
     {
-      "model_version": "lgbm_v2.1",
-      "algorithm": "LightGBM",
-      "objective": "multiclass",
-      "n_classes": 10,
-      "best_iteration": 300,
-      "macro_f1": 0.998,
-      "macro_precision": 0.998,
-      "macro_recall": 0.998,
-      "macro_pr_auc": 0.9999,
-      "timestamp": "2026-04-25T06:00:33.497828+00:00",
-      "artifacts": [
-        "lgbm_model.joblib",
-        "label_encoder.joblib",
-        "v2_report.json",
-        "feature_importance.png"
-      ]
-    },
-    {
       "model_version": "lgbm_v2.2",
       "algorithm": "LightGBM",
       "objective": "multiclass",

@@ -80,10 +80,10 @@ OOD injection multiplies all numerical features by **5x** above training maximum
 flowchart LR
     RAW["Raw CSV\n45K rows × 25 cols"] --> FE["Feature Engineering"]
     FE --> NUM["StandardScaler\n6 numerical"]
-    FE --> HASH["FeatureHasher\n64 buckets"]
-    FE --> TFIDF["TF-IDF\n500 features"]
+    FE --> HASH["FeatureHasher\n256 buckets"]
+    FE --> TFIDF["TF-IDF\n600 features"]
     FE --> DUMMY["One-Hot\n~22 cols"]
-    NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix\n592 features"]
+    NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix\n884 features"]
     MAT --> LGBM["LightGBM GBDT\n300 rounds"]
     LGBM --> PRED["10-Class Prediction"]
 ```

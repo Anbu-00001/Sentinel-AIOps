@@ -6,7 +6,7 @@
 ## 🧠 Technical Core
 Our intelligence relies on Python-based Machine Learning models:
 - **Isolation Forest**: Utilized for unsupervised anomaly detection in incoming log streams.
-- **LSTM (Long Short-Term Memory)**: Employed for recognizing and predicting complex temporal patterns within log sequences.
+- **LightGBM**: Employed for recognizing and predicting complex patterns within log sequences.
 
 ## 🏗️ Infrastructure
 The system follows a robust, local-first architecture:
@@ -21,6 +21,6 @@ All autonomous agents interacting with this project MUST adhere strictly to the 
 ## 📁 Directory Map
 The project is structurally divided into the following key domains:
 - **`/data`**: For storing raw logs and processed datasets used in model training and inference.
-- **`/models`**: For housing the trained weights and configurations of our Isolation Forest and LSTM models.
+- **`/models`**: For housing the trained weights and configurations of our Isolation Forest and LightGBM models.
 - **`/mcp-server`**: For containing the FastMCP-based local inference logic and API endpoints.
 - **`/dashboard`**: For the Next.js frontend code providing the observability and monitoring interface.
