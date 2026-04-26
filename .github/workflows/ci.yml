@@ -45,7 +45,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt \
+            --extra-index-url https://pypi.org/simple/ \
+            || python -m pip install -r requirements.txt \
+               --ignore-requires-python
+          python -m pip install pytest pytest-anyio httpx \
+            fastapi uvicorn sqlalchemy pydantic \
+            lightgbm scikit-learn joblib numpy scipy pandas \
+            matplotlib mcp prometheus_client python-multipart
+          python -m pip show pytest
+          python -m pytest --version
+
+      - name: Verify pytest is available
+        run: |
+          python -m pip show pytest
+          python -m pytest --version
+          echo "Python path: $(which python)"
+          echo "Pip path: $(which pip || echo not on PATH)"
+          python -c "import pytest; print('pytest OK:', pytest.__version__)"
+          python -c "import lightgbm; print('lightgbm OK')"
+          python -c "import sklearn; print('sklearn OK')"
+          python -c "import fastapi; print('fastapi OK')"
       - name: Train model pipeline (generates artifacts for ablation)
         run: |
           CI=1 TESTING=1 python models/preprocess.py
