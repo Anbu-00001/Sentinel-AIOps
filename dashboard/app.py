@@ -22,14 +22,14 @@ import sys
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import FastAPI, Query, Request, HTTPException
+from fastapi import Depends, FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 from fastapi.concurrency import run_in_threadpool
 import joblib
 
 # ── Webhook Security ──────────────────────────────────────────────────────────
-GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 
 
 def verify_webhook_signature(payload_body: bytes, signature_header: str, secret: str) -> bool:
@@ -204,6 +204,74 @@ app = FastAPI(
 )
 
 app.add_middleware(PayloadSizeLimitMiddleware, max_upload_size=2_000_000)
+
+
+# ── API Key Authentication ───────────────────────────────────────
+_API_KEY_HEADER = APIKeyHeader(
+    name="X-API-Key",
+    auto_error=False,
+    description="API key for dashboard endpoint authentication.",
+)
+
+
+def _load_api_key() -> str:
+    """
+    Load SENTINEL_API_KEY from environment at call time.
+    Returns empty string if not set (development mode).
+    """
+    return os.getenv("SENTINEL_API_KEY", "")
+
+
+async def require_api_key(
+    api_key_header: str = Depends(_API_KEY_HEADER),
+) -> None:
+    """
+    FastAPI dependency that enforces API key authentication.
+
+    Behaviour matrix:
+      SENTINEL_API_KEY unset + no header  → 200 (dev mode, open)
+      SENTINEL_API_KEY unset + any header → 200 (dev mode, open)
+      SENTINEL_API_KEY set + correct key  → 200 (authenticated)
+      SENTINEL_API_KEY set + wrong key    → 403 (rejected)
+      SENTINEL_API_KEY set + no header    → 403 (rejected)
+
+    Dev mode (SENTINEL_API_KEY unset) allows unauthenticated
+    access so local development requires no configuration.
+    Production MUST set SENTINEL_API_KEY via environment.
+    """
+    configured_key = _load_api_key()
+    if not configured_key:
+        # Dev mode: no key configured, allow all requests.
+        log.debug(
+            "SENTINEL_API_KEY not set — running in open dev mode. "
+            "Set this variable before exposing to a network."
+        )
+        return
+
+    if not api_key_header:
+        log.warning(
+            "API request rejected: X-API-Key header missing."
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "X-API-Key header is required. "
+                "Set SENTINEL_API_KEY in your environment and "
+                "pass it as the X-API-Key request header."
+            ),
+        )
+
+    if not hmac.compare_digest(
+        api_key_header.encode("utf-8"),
+        configured_key.encode("utf-8"),
+    ):
+        log.warning(
+            "API request rejected: invalid X-API-Key value."
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key.",
+        )
 
 
 def load_artifacts():
@@ -580,7 +648,7 @@ async def health_check() -> dict[str, str]:
     return {"status": "healthy", "service": "sentinel-dashboard"}
 
 
-@app.get("/api/dashboard")
+@app.get("/api/dashboard", dependencies=[Depends(require_api_key)])
 async def get_dashboard_data() -> DashboardData:
     """Return complete dashboard payload as JSON."""
     log.info("Reasoning: Building dashboard data payload.")
@@ -597,7 +665,7 @@ async def get_dashboard_data() -> DashboardData:
     )
 
 
-@app.get("/api/drift")
+@app.get("/api/drift", dependencies=[Depends(require_api_key)])
 async def get_drift_report() -> dict[str, Any]:
     """Return raw drift report."""
     report = _load_drift_report()
@@ -606,7 +674,7 @@ async def get_drift_report() -> dict[str, Any]:
     return report
 
 
-@app.get("/api/psi")
+@app.get("/api/psi", dependencies=[Depends(require_api_key)])
 async def get_psi_scores() -> dict[str, Any]:
     """
     Return live PSI drift scores computed from the last 100 SQL inference records.
@@ -651,7 +719,7 @@ async def get_psi_scores() -> dict[str, Any]:
     }
 
 
-@app.get("/api/registry")
+@app.get("/api/registry", dependencies=[Depends(require_api_key)])
 async def get_registry() -> dict[str, Any]:
     """Return model registry."""
     registry = _load_registry()
@@ -660,7 +728,7 @@ async def get_registry() -> dict[str, Any]:
     return registry
 
 
-@app.get("/api/history")
+@app.get("/api/history", dependencies=[Depends(require_api_key)])
 async def get_history(
     limit: int = Query(default=100, ge=1, le=1000, description="Max records to return"),
 ) -> list[dict]:
@@ -700,7 +768,8 @@ async def github_webhook(request: Request) -> JSONResponse:
     # ── HMAC Signature Verification ───────────────────────────────────
     raw_body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
-    if not verify_webhook_signature(raw_body, signature, GITHUB_WEBHOOK_SECRET):
+    _webhook_secret = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+    if not verify_webhook_signature(raw_body, signature, _webhook_secret):
         log.warning("Webhook signature verification FAILED. Rejecting request.")
         raise HTTPException(status_code=403, detail="Invalid webhook signature.")
 

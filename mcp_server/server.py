@@ -37,6 +37,9 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from concurrent.futures import Future
 
 # Global thread pool for offloading database I/O
 _db_pool = ThreadPoolExecutor(max_workers=4)
@@ -250,7 +253,23 @@ def analyze_log(features: dict) -> dict:
                         "DB write FAILED after %d attempts: %s. Inference record lost.",
                         max_retries, db_exc)
 
-    _db_pool.submit(_save_inference)
+    def _on_persistence_done(future: "Future[None]") -> None:
+        """
+        Callback invoked when the DB persistence future completes.
+        Logs an ERROR if the future raised an unhandled exception,
+        ensuring silent data loss is never possible.
+        """
+        exc = future.exception()
+        if exc is not None:
+            log.error(
+                "CRITICAL: Inference record permanently lost after "
+                "all DB retry attempts. Exception: %s — %s",
+                type(exc).__name__,
+                exc,
+            )
+
+    _persistence_future: "Future[None]" = _db_pool.submit(_save_inference)
+    _persistence_future.add_done_callback(_on_persistence_done)
 
     return {
         "prediction": prediction,

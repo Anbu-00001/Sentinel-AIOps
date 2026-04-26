@@ -73,7 +73,12 @@ TEXT_COL = "error_message"
 # Label column (kept aside — used only during validation, not training)
 LABEL_COL = "failure_type"
 
-HASH_N_FEATURES = 64  # bits for FeatureHasher (power-of-2 preferred)
+# HASH_N_FEATURES: FeatureHasher output dimension.
+# Must be a power of 2 (FeatureHasher requirement).
+# With 50 repos and 100 authors, 256 buckets reduces
+# collision probability vs the prior value of 64.
+# Upgrade to 512+ if real-world repo cardinality exceeds 200.
+HASH_N_FEATURES = 256  # bits for FeatureHasher (power-of-2 preferred)
 TFIDF_MAX_FEATURES = 600
 
 

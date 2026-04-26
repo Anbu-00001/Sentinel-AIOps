@@ -26,7 +26,7 @@
   ],
   "text_col": "error_message",
   "label_col": "failure_type",
-  "hash_n_features": 64,
+  "hash_n_features": 256,
   "tfidf_max_features": 600,
   "dummy_column_order": [
     "ci_tool_GitHub Actions",
@@ -49,6 +49,6 @@
     "severity_LOW",
     "severity_MEDIUM"
   ],
-  "total_features": 692,
-  "artifacts_timestamp": "2026-04-25T20:25:43.071706"
+  "total_features": 884,
+  "artifacts_timestamp": "2026-04-26T13:36:03.208971"
 }

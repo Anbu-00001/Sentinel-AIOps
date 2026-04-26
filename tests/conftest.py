@@ -12,6 +12,11 @@ import os
 # ── Environment setup (must precede ALL project imports) ─────────────────────
 os.environ["TESTING"] = "1"
 
+# ── Clear secrets that may leak from the user's shell environment ────────────
+# Individual tests that need these secrets set them explicitly and clean up.
+os.environ.pop("GITHUB_WEBHOOK_SECRET", None)
+os.environ.pop("SENTINEL_API_KEY", None)
+
 import pytest  # noqa: E402
 import pandas as pd  # noqa: E402
 import numpy as np  # noqa: E402

@@ -19,3 +19,10 @@ RETRAIN_THRESHOLD: int = int(os.getenv("RETRAIN_THRESHOLD", "100"))
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB_PATH = os.path.join(ROOT_DIR, "database", "sentinel.db")
 DATABASE_URI: str = os.getenv("DATABASE_URI", f"sqlite:///{DEFAULT_DB_PATH}")
+
+# ── API Authentication ───────────────────────────────────────────
+# SENTINEL_API_KEY: Required for all protected dashboard endpoints.
+# Generate with: python -c "import secrets;
+#                            print(secrets.token_urlsafe(32))"
+# Set in environment or .env file. Never hardcode.
+SENTINEL_API_KEY: str = os.getenv("SENTINEL_API_KEY", "")
