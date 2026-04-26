@@ -113,7 +113,6 @@ except Exception as exc:
 
 # Chaos multipliers (5x above training max)
 CHAOS_MULTIPLIER: float = 5.0
-import numpy as np
 
 
 class ChaosLevel(str, Enum):
