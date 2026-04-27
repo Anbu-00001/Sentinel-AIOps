@@ -5,8 +5,14 @@
 
 ## 🧠 Technical Core
 Our intelligence relies on Python-based Machine Learning models:
-- **Isolation Forest**: Utilized for unsupervised anomaly detection in incoming log streams.
-- **LightGBM**: Employed for recognizing and predicting complex patterns within log sequences.
+- **LightGBM Multiclass Classifier**: Supervised model trained on
+  10 CI/CD failure categories using numerical telemetry features
+  (CPU usage, build duration, memory consumption, retry count).
+  Macro F1 ≈ 0.89 with ablation-verified telemetry-driven signal.
+- **Isolation Forest**: Unsupervised anomaly detector for
+  out-of-distribution log events that don't match known patterns.
+- **PSI Drift Monitor**: Population Stability Index monitoring
+  that detects training distribution shift and triggers retraining.
 
 ## 🏗️ Infrastructure
 The system follows a robust, local-first architecture:

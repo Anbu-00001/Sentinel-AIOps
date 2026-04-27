@@ -16,6 +16,7 @@ matplotlib==3.10.8
 fastapi==0.136.1
 uvicorn==0.46.0
 python-multipart==0.0.21
+# starlette==1.0.0 verified compatible with fastapi==0.136.1
 starlette==1.0.0
 
 # ── Validation & Serialization ───────────────────────────────────────
