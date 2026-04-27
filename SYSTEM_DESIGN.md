@@ -84,7 +84,7 @@ flowchart LR
     FE --> TFIDF["TF-IDF\n600 features"]
     FE --> DUMMY["One-Hot\n~22 cols"]
     NUM & HASH & TFIDF & DUMMY --> MAT["Sparse Matrix\n884 features"]
-    MAT --> LGBM["LightGBM GBDT\n400 rounds"]
+    MAT --> LGBM["LightGBM GBDT\n120 rounds"]
     LGBM --> PRED["10-Class Prediction"]
 ```
 
@@ -155,7 +155,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     PUSH["git push"] --> LINT["flake8\nPEP8 check"]
-    LINT --> TEST["pytest\n8 model tests"]
+    LINT --> TEST["pytest\n91 tests (logic + DB + ablation)"]
     TEST --> PASS["✅ CI Green"]
 ```
 

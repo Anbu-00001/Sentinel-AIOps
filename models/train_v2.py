@@ -50,6 +50,10 @@ LGBM_PARAMS = {
     "objective": "multiclass",
     "metric": "multi_logloss",
     "boosting_type": "gbdt",
+    # n_estimators: CI logs show validation loss (multi_logloss)
+    # reaches minimum at round ~100 then degrades (overfitting).
+    # 120 rounds = observed optimum + 20% buffer. Reduces CI
+    # training time from ~3 minutes to under 60 seconds.
     "n_estimators": 120,
     "learning_rate": 0.1,
     "num_leaves": 63,

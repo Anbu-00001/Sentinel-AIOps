@@ -5,19 +5,25 @@
 
 ## 🧠 Technical Core
 Our intelligence relies on Python-based Machine Learning models:
-- **LightGBM Multiclass Classifier**: Supervised model trained on
-  10 CI/CD failure categories using numerical telemetry features
-  (CPU usage, build duration, memory consumption, retry count).
-  Macro F1 ≈ 0.89 with ablation-verified telemetry-driven signal.
+- **LightGBM Multiclass Classifier**: Supervised model classifying
+  CI/CD logs into 10 failure categories using numerical telemetry
+  features (CPU usage, build duration, memory consumption, retry
+  count). Macro F1 ≈ 0.89 on a balanced 10-class test set.
+  Ablation-verified: removing TF-IDF features reduces F1 by only
+  0.004 points, confirming the model learns from operational
+  telemetry — not log text.
 - **Isolation Forest**: Unsupervised anomaly detector for
-  out-of-distribution log events that don't match known patterns.
-- **PSI Drift Monitor**: Population Stability Index monitoring
-  that detects training distribution shift and triggers retraining.
+  out-of-distribution logs that don't match any known failure
+  pattern, flagging novel infrastructure incidents.
+- **PSI Drift Monitor**: Population Stability Index tracking
+  that compares live inference distributions against the training
+  baseline across all numerical and categorical features. Triggers
+  a retrain recommendation when any feature PSI exceeds 0.20.
 
 ## 🏗️ Infrastructure
 The system follows a robust, local-first architecture:
 - **Inference Engine**: Powered by a FastMCP server for low-latency, localized model inference.
-- **Observability Interface**: A Next.js 15 dashboard for real-time monitoring, visualization, and actionable insights.
+- **Observability Interface**: A FastAPI dashboard providing real-time health badges, PSI drift heatmaps, inference history, and GitHub webhook ingestion.
 
 ## 📜 Workflow Rules
 All autonomous agents interacting with this project MUST adhere strictly to the following operational protocols:
