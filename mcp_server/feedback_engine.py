@@ -185,7 +185,20 @@ def submit_ground_truth(
             author_id=author_id,
         )
     except Exception as exc:
-        log.warning("Validation failed: %s", exc)
+        # Distinguish Pydantic validation errors (expected) from
+        # unexpected errors (bugs) for clearer operator visibility.
+        exc_type = type(exc).__name__
+        if "ValidationError" in exc_type or "ValueError" in exc_type:
+            log.warning(
+                "Feedback validation failed (log_id=%s): %s",
+                log_id, exc,
+            )
+        else:
+            log.error(
+                "Unexpected error in feedback submission "
+                "(log_id=%s, type=%s): %s",
+                log_id, exc_type, exc,
+            )
         return FeedbackError(
             error="Validation failed",
             details=[str(exc)],

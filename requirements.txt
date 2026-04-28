@@ -16,8 +16,12 @@ matplotlib==3.10.8
 fastapi==0.136.1
 uvicorn==0.46.0
 python-multipart==0.0.21
-# starlette==1.0.0 verified compatible with fastapi==0.136.1
-starlette==1.0.0
+# starlette: NOT explicitly pinned — managed as a
+# transitive dependency of fastapi==0.136.1.
+# Pinning to starlette==1.0.0 conflicts with fastapi's
+# declared starlette requirement and caused silent CI
+# install failures (pip aborted mid-install, leaving
+# pytest uninstalled despite exit code 0).
 
 # ── Validation & Serialization ───────────────────────────────────────
 pydantic==2.13.3
