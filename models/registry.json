@@ -161,9 +161,27 @@
         "v2_report.json",
         "feature_importance.png"
       ]
+    },
+    {
+      "model_version": "lgbm_v2.10",
+      "algorithm": "LightGBM",
+      "objective": "multiclass",
+      "n_classes": 10,
+      "best_iteration": 120,
+      "macro_f1": 0.8978,
+      "macro_precision": 0.8989,
+      "macro_recall": 0.8975,
+      "macro_pr_auc": 0.9513,
+      "timestamp": "2026-04-27T11:12:38.379592+00:00",
+      "artifacts": [
+        "lgbm_model.joblib",
+        "label_encoder.joblib",
+        "v2_report.json",
+        "feature_importance.png"
+      ]
     }
   ],
-  "latest": "lgbm_v2.9",
+  "latest": "lgbm_v2.10",
   "retrain_suggested": false,
   "last_drift_check": null,
   "retrain_required": false,
