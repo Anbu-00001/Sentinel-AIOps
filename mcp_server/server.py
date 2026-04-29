@@ -22,6 +22,9 @@ MODELS_DIR = os.path.join(ROOT, "models")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+import sentinel_logging
+sentinel_logging.configure_logging()
+
 from mcp_server.logic import validate_input, run_prediction
 from prometheus_client import (
     Counter,
@@ -47,8 +50,6 @@ _db_pool = ThreadPoolExecutor(max_workers=4)
 from database import LogEntry, get_session, init_db  # noqa: E402
 
 # ── Logging ─────────────────────────────────────────────────────────────
-import sentinel_logging
-sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.mcp_server")
 
 # ── Prometheus metrics ──────────────────────────────────────────────────

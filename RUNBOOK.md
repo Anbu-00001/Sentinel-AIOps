@@ -187,6 +187,142 @@ make docker-down
 
 All services communicate over the `sentinel-net` Docker network.
 
+## Oracle Cloud Deployment
+
+**Step 1 — Provision the VM**
+- Oracle Cloud Always Free → Compute → Create Instance
+- Shape: Ampere A1 Flex, 2 OCPU, 6 GB RAM
+- Image: Canonical Ubuntu 22.04
+- Generate or upload SSH key during provisioning
+
+**Step 2 — Open firewall ports**
+Two places to configure — both are required:
+- Oracle Security List: add ingress rules for TCP port 80 (0.0.0.0/0) and TCP
+  port 22 (your IP only)
+- Ubuntu UFW on the VM:
+```bash
+  sudo ufw allow 22/tcp
+  sudo ufw allow 80/tcp
+  sudo ufw enable
+```
+
+**Step 3 — Install Docker on the VM**
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+docker compose version   # verify
+```
+
+**Step 4 — Clone the repo and configure secrets**
+```bash
+git clone https://github.com/Anbu-00001/Sentinel-AIOps.git
+cd Sentinel-AIOps
+cp .env.example .env
+# Edit .env and populate MODEL_SIGNATURE_SECRET, GITHUB_WEBHOOK_SECRET,
+# SENTINEL_API_KEY with values generated via:
+#   python3 -c "import secrets; print(secrets.token_hex(32))"
+# Set SENTINEL_DB_PATH=/app/data/sentinel.db
+```
+
+**Step 5 — Train the model on the VM**
+```bash
+pip3 install -r requirements.txt
+export $(cat .env | xargs)
+make train
+make resign
+```
+Note: Training requires Python 3.12+ and ~4 GB RAM. The A1 VM has 6 GB — sufficient.
+
+**Step 6 — Deploy**
+```bash
+export $(cat .env | xargs)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+**Step 7 — Verify**
+```bash
+# From your local machine — replace with your VM's public IP
+curl http://<vm-public-ip>/health
+# Expected: {"status":"healthy","service":"sentinel-dashboard"}
+
+curl http://<vm-public-ip>/metrics
+# Expected: Prometheus text output
+```
+
+**Step 8 — Register the GitHub webhook**
+- GitHub repo → Settings → Webhooks → Add webhook
+- Payload URL: `http://<vm-public-ip>/webhook/github`
+- Content type: `application/json`
+- Secret: value of `GITHUB_WEBHOOK_SECRET` from your `.env`
+- Events: "Workflow runs"
+
+**Maintenance commands** (include these verbatim):
+```bash
+# View live logs
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+
+# Restart after a code change
+git pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+# Stop everything
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+# SQLite data persists in the named volume — to inspect:
+docker volume inspect sentinel-aiops_sentinel_data
+```
+
+## Hugging Face Spaces Deployment
+
+**Prerequisites**
+- Hugging Face account (free, no card required)
+- The trained model artifacts must be committed to the repo OR generated
+  inside the container at build time. Because HF builds the Docker image
+  from the repo, the artifacts must either be present in the repo
+  (models/*.joblib committed) or the Dockerfile.hf must run `make train`
+  during build. Document both options and recommend committing artifacts
+  since training 10k samples in a build container is slow.
+
+**Step 1 — Create the HF Space**
+- huggingface.co → New Space
+- Space SDK: Docker
+- Visibility: Public (required for always-on free tier)
+- Space name: sentinel-aiops
+
+**Step 2 — Set Secrets**
+- Space → Settings → Variables and Secrets → New Secret
+- Add all three secrets:
+    MODEL_SIGNATURE_SECRET, GITHUB_WEBHOOK_SECRET, SENTINEL_API_KEY
+- Set SENTINEL_DB_PATH=/app/data/sentinel.db as a regular variable
+- Note: HF Spaces injects these as environment variables at container
+  runtime — identical to how .env works locally
+
+**Step 3 — Connect GitHub repo**
+- Space → Files → Connect a GitHub repository
+- Select Anbu-00001/Sentinel-AIOps
+- HF will build and deploy automatically on every push to main
+
+**Step 4 — Verify deployment**
+```bash
+# Replace with your actual HF Space URL
+curl https://anbu-00001-sentinel-aiops.hf.space/health
+# Expected: {"status":"healthy","service":"sentinel-dashboard"}
+```
+
+**Step 5 — Register the GitHub webhook**
+- GitHub repo → Settings → Webhooks → Add webhook
+- Payload URL: https://anbu-00001-sentinel-aiops.hf.space/webhook/github
+- Content type: application/json
+- Secret: value of GITHUB_WEBHOOK_SECRET
+- Events: Workflow runs
+
+**Known HF Spaces constraint**
+- SQLite data does not persist across Space restarts. Inference history
+  resets on each redeploy. This is documented in RUNBOOK Known Limitations
+  (item 7 — Prometheus metrics, analogous for SQLite on HF free tier).
+  For persistent storage, upgrade to HF Pro or migrate to PostgreSQL.
+
 ## Secret Rotation
 
 When rotating secrets:
