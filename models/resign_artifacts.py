@@ -21,10 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crypto_sig
 
 # ── Logging ──────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.resign")
 
 MODELS_DIR: str = os.path.dirname(os.path.abspath(__file__))

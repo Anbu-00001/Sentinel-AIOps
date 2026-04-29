@@ -73,9 +73,8 @@ from config import (
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.dashboard")
 
 # ── Import Decoupled ML Logic ───────────────────────────────────────────────

@@ -47,10 +47,8 @@ _db_pool = ThreadPoolExecutor(max_workers=4)
 from database import LogEntry, get_session, init_db  # noqa: E402
 
 # ── Logging ─────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.mcp_server")
 
 # ── Prometheus metrics ──────────────────────────────────────────────────

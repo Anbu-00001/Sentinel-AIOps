@@ -42,10 +42,13 @@ from sklearn.metrics import (
 )
 
 # ── Logging ──────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+import sys
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.train_detector")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

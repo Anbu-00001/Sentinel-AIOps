@@ -31,9 +31,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.stream")
 
 # ── Constants (based on training distribution from data_summary.json) ─────────

@@ -34,10 +34,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crypto_sig
 
 # ── Logging ──────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+import sys
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.train_v2")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

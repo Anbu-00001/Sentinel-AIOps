@@ -29,9 +29,8 @@ from pydantic import BaseModel, Field
 from scipy.stats import chi2_contingency
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.drift")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

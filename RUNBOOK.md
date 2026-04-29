@@ -220,6 +220,22 @@ Configure GitHub to send CI/CD failure events to Sentinel-AIOps:
    - **Events**: Select "Workflow runs"
 3. **Verify delivery**: After a workflow completes, check the GitHub webhook delivery log — it should show HTTP 200
 
+## Known Limitations
+
+1. **SQLite, not PostgreSQL** — WAL mode is enabled and the server runs with `--workers 1` to prevent write contention. Under sustained concurrent webhook load (>10 simultaneous POSTs), `sqlite3.OperationalError: database is locked` may still occur. Mitigation path: migrate `DATABASE_URI` to a PostgreSQL connection string and update `docker-compose.yml` to provision a Postgres service.
+
+2. **Synthetic training data** — The LightGBM model (lgbm_v2.10, Macro F1 = 0.8978) was trained entirely on procedurally generated data from `scripts/generate_synthetic.py`. Classification accuracy on real-world CI/CD logs from unfamiliar pipelines (Jenkins on Windows, self-hosted runners, non-standard toolchains) is unknown and likely lower.
+
+3. **Single-tenant webhook ingestion** — The `/webhook/github` endpoint classifies events from any GitHub repository that registers the webhook URL and shares the secret. The dashboard shows aggregate history across all sources. There is no per-repository isolation, per-user data separation, or multi-tenant access control.
+
+4. **In-memory rate limiting** — Rate limits (`RATE_LIMIT_WEBHOOK_PER_MINUTE`, `RATE_LIMIT_API_PER_MINUTE`) are tracked in process memory via `storage_uri="memory://"`. If multiple dashboard instances are deployed (e.g., horizontal scaling on Railway), each instance maintains an independent counter and the effective rate limit becomes `N × configured_limit`. Fix: switch `storage_uri` to a Redis connection string when scaling horizontally.
+
+5. **Heuristic feature mapping from GitHub webhooks** — `_map_github_to_features()` in `dashboard/app.py` estimates `cpu_usage_pct` and `memory_usage_mb` from training-set baseline means when GitHub does not provide these fields (which is always — GitHub does not expose resource metrics in webhook payloads). These features are injected as constants, not measured values. The model's classification of CPU/memory-related failure types (e.g., Resource Exhaustion) via the webhook path is therefore unreliable.
+
+6. **No automated retraining** — When PSI drift exceeds the `PSI_SEVERE_THRESHOLD` (default 0.20), `registry.json` is updated with `retrain_required: true` and a log warning is emitted. No automated retraining pipeline is triggered. An operator must manually run `make retrain` and `make resign` in response to the signal.
+
+7. **Prometheus metrics do not persist across restarts** — All Prometheus counters (`total_inferences`, `total_anomalies_detected`, `inference_errors_total`) are in-process and reset to zero on every server restart. Only the SQLite inference history persists across restarts.
+
 ## Troubleshooting
 
 ### "RuntimeError: MODEL_SIGNATURE_SECRET not set"

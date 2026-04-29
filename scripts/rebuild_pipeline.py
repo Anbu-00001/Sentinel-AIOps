@@ -10,7 +10,12 @@ import os
 import sys
 import logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+import sentinel_logging
+sentinel_logging.configure_logging()
 log = logging.getLogger("sentinel.rebuild")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
