@@ -22,6 +22,11 @@ import sys
 from datetime import datetime
 from typing import Any, Optional
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from fastapi import Depends, FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security.api_key import APIKeyHeader
@@ -59,7 +64,13 @@ def verify_webhook_signature(payload_body: bytes, signature_header: str, secret:
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import LogEntry, get_session, init_db  # noqa: E402
-from config import PSI_SEVERE_THRESHOLD, PSI_MODERATE_THRESHOLD, RETRAIN_THRESHOLD
+from config import (
+    PSI_SEVERE_THRESHOLD,
+    PSI_MODERATE_THRESHOLD,
+    RETRAIN_THRESHOLD,
+    RATE_LIMIT_WEBHOOK_PER_MINUTE,
+    RATE_LIMIT_API_PER_MINUTE,
+)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -196,6 +207,56 @@ async def lifespan_handler(app: FastAPI):
     yield
 
 
+# ── Rate Limiting ─────────────────────────────────────────────
+# Uses in-memory storage — correct for single-node SQLite
+# deployment with --workers 1. Switch to Redis storage string
+# (e.g. "redis://localhost:6379") when scaling horizontally.
+_limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[],   # No global default — limits are
+                         # applied per-route explicitly.
+    storage_uri="memory://",
+)
+
+
+async def _custom_rate_limit_handler(
+    request: Request,
+    exc: RateLimitExceeded,
+) -> JSONResponse:
+    """
+    Return a structured JSON 429 response instead of
+    slowapi's default plain-text response.
+
+    Parameters
+    ----------
+    request : Request
+        The incoming FastAPI request.
+    exc : RateLimitExceeded
+        The exception raised by slowapi when limit is hit.
+
+    Returns
+    -------
+    JSONResponse
+        HTTP 429 with JSON body containing error detail.
+    """
+    log.warning(
+        "Rate limit exceeded: %s %s from %s — %s",
+        request.method,
+        request.url.path,
+        get_remote_address(request),
+        exc.detail,
+    )
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "Rate limit exceeded",
+            "detail": str(exc.detail),
+            "path": request.url.path,
+        },
+        headers={"Retry-After": "60"},
+    )
+
+
 app = FastAPI(
     title="Sentinel-AIOps Dashboard",
     description="Observability dashboard for CI/CD anomaly detection platform.",
@@ -203,7 +264,11 @@ app = FastAPI(
     lifespan=lifespan_handler,
 )
 
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _custom_rate_limit_handler)
+
 app.add_middleware(PayloadSizeLimitMiddleware, max_upload_size=2_000_000)
+app.add_middleware(SlowAPIMiddleware)
 
 
 # ── API Key Authentication ───────────────────────────────────────
@@ -649,7 +714,8 @@ async def health_check() -> dict[str, str]:
 
 
 @app.get("/api/dashboard", dependencies=[Depends(require_api_key)])
-async def get_dashboard_data() -> DashboardData:
+@_limiter.limit(f"{RATE_LIMIT_API_PER_MINUTE}/minute")
+async def get_dashboard_data(request: Request) -> DashboardData:
     """Return complete dashboard payload as JSON."""
     log.info("Reasoning: Building dashboard data payload.")
     drift_report = _load_drift_report()
@@ -666,7 +732,8 @@ async def get_dashboard_data() -> DashboardData:
 
 
 @app.get("/api/drift", dependencies=[Depends(require_api_key)])
-async def get_drift_report() -> dict[str, Any]:
+@_limiter.limit(f"{RATE_LIMIT_API_PER_MINUTE}/minute")
+async def get_drift_report(request: Request) -> dict[str, Any]:
     """Return raw drift report."""
     report = _load_drift_report()
     if report is None:
@@ -675,7 +742,8 @@ async def get_drift_report() -> dict[str, Any]:
 
 
 @app.get("/api/psi", dependencies=[Depends(require_api_key)])
-async def get_psi_scores() -> dict[str, Any]:
+@_limiter.limit(f"{RATE_LIMIT_API_PER_MINUTE}/minute")
+async def get_psi_scores(request: Request) -> dict[str, Any]:
     """
     Return live PSI drift scores computed from the last 100 SQL inference records.
 
@@ -720,7 +788,8 @@ async def get_psi_scores() -> dict[str, Any]:
 
 
 @app.get("/api/registry", dependencies=[Depends(require_api_key)])
-async def get_registry() -> dict[str, Any]:
+@_limiter.limit(f"{RATE_LIMIT_API_PER_MINUTE}/minute")
+async def get_registry(request: Request) -> dict[str, Any]:
     """Return model registry."""
     registry = _load_registry()
     if registry is None:
@@ -729,7 +798,9 @@ async def get_registry() -> dict[str, Any]:
 
 
 @app.get("/api/history", dependencies=[Depends(require_api_key)])
+@_limiter.limit(f"{RATE_LIMIT_API_PER_MINUTE}/minute")
 async def get_history(
+    request: Request,
     limit: int = Query(default=100, ge=1, le=1000, description="Max records to return"),
 ) -> list[dict]:
     """Return recent inference history from the database."""
@@ -749,6 +820,7 @@ async def get_history(
 
 
 @app.post("/webhook/github")
+@_limiter.limit(f"{RATE_LIMIT_WEBHOOK_PER_MINUTE}/minute")
 async def github_webhook(request: Request) -> JSONResponse:
     """
     Receive a GitHub Actions webhook (workflow_run events).
@@ -856,10 +928,10 @@ async def github_webhook(request: Request) -> JSONResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard_ui() -> str:
+async def dashboard_ui(request: Request) -> str:
     """Serve the observability dashboard as an HTML page."""
     log.info("Reasoning: Rendering dashboard UI.")
-    data: DashboardData = await get_dashboard_data()
+    data: DashboardData = await get_dashboard_data(request)
 
     # Build heatmap rows
     heatmap_rows = ""

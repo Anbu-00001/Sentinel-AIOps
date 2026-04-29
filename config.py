@@ -26,3 +26,14 @@ DATABASE_URI: str = os.getenv("DATABASE_URI", f"sqlite:///{DEFAULT_DB_PATH}")
 #                            print(secrets.token_urlsafe(32))"
 # Set in environment or .env file. Never hardcode.
 SENTINEL_API_KEY: str = os.getenv("SENTINEL_API_KEY", "")
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+# All limits use in-memory storage (no Redis required for single-node).
+# Limits are per IP address per time window.
+# /health and / are intentionally NOT rate limited.
+RATE_LIMIT_WEBHOOK_PER_MINUTE: int = int(
+    os.getenv("RATE_LIMIT_WEBHOOK_PER_MINUTE", "60")
+)
+RATE_LIMIT_API_PER_MINUTE: int = int(
+    os.getenv("RATE_LIMIT_API_PER_MINUTE", "30")
+)

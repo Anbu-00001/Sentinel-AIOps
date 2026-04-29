@@ -1,3 +1,4 @@
+# flake8: noqa
 # Sentinel-AIOps pinned dependencies
 # Generated from: pip freeze on Python 3.12
 # To update: pip install -U <package> then update version here.
@@ -11,6 +12,9 @@ scikit-learn==1.8.0
 lightgbm==4.6.0
 joblib==1.5.3
 matplotlib==3.10.8
+
+# ── Rate Limiting ─────────────────────────────────────────────
+slowapi==0.1.9
 
 # ── Web Framework ────────────────────────────────────────────────────
 fastapi==0.136.1
