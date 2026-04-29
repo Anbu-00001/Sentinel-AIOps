@@ -1,3 +1,14 @@
+---
+title: Sentinel
+emoji: 🔥
+colorFrom: pink
+colorTo: red
+sdk: docker
+pinned: false
+license: mit
+short_description: CI/CD error detection
+---
+
 # 🛡️ Sentinel-AIOps: Self-Aware CI/CD Intelligence
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
