@@ -1,32 +1,32 @@
 FROM python:3.12-slim
 
-LABEL maintainer="sentinel-aiops" \
-      description="Sentinel-AIOps FastMCP Inference Server"
-
-WORKDIR /app
-
-# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies
+WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy ONLY the modules needed by the MCP server
-COPY models/ ./models/
-COPY mcp_server/ ./mcp_server/
-COPY database/ ./database/
-COPY data/ ./data/
-COPY config.py ./config.py
+COPY models/ models/
+COPY mcp_server/ mcp_server/
+COPY database/ database/
+COPY dashboard/ dashboard/
+COPY scripts/ scripts/
+COPY config.py .
+COPY sentinel_logging.py .
 
-# Expose Prometheus metrics port
-EXPOSE 9090
+# Create writable data directory (no pre-existing db)
+RUN mkdir -p /app/data/feedback && \
+    chown -R 1000:1000 /app/data
 
-# Health check using stdlib (no external dependencies)
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')" || exit 1
+# Ensure all Python imports resolve from /app
+ENV PYTHONPATH=/app
 
-# Run the MCP server
-CMD ["python", "mcp_server/server.py"]
+EXPOSE 7860
+
+USER 1000
+
+# Run uvicorn directly on 7860 — no nginx/supervisord needed on HF Spaces
+CMD ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
