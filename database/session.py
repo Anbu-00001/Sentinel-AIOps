@@ -44,11 +44,27 @@ def _build_engine():
     )
 
     if turso_url and turso_token:
-        # Production: Turso via libsql-experimental
-        # Uses a custom SQLAlchemy creator that connects via libsql
         log.info("Reasoning: Connecting to Turso via libsql-experimental.")
         try:
             import libsql_experimental as libsql
+
+            class _LibSQLConnWrapper:
+                """
+                Thin wrapper around libsql_experimental.Connection.
+                SQLAlchemy's pysqlite dialect calls create_function() on
+                every new connection to register REGEXP support. libsql
+                connections are C extension objects and don't support this.
+                This wrapper proxies everything to the real connection but
+                adds a no-op create_function so SQLAlchemy doesn't crash.
+                """
+                def __init__(self, conn):
+                    self._conn = conn
+
+                def create_function(self, *args, **kwargs):
+                    pass  # no-op — libsql doesn't need REGEXP registration
+
+                def __getattr__(self, name):
+                    return getattr(self._conn, name)
 
             def _creator():
                 conn = libsql.connect(
@@ -56,30 +72,23 @@ def _build_engine():
                     sync_url=turso_url,
                     auth_token=turso_token,
                 )
-                # SQLAlchemy's pysqlite dialect calls create_function() to
-                # register REGEXP support. libsql doesn't implement this method.
-                # Patch it with a no-op so SQLAlchemy's hook doesn't crash.
-                if not hasattr(conn, "create_function"):
-                    conn.create_function = lambda *args, **kwargs: None
-                return conn
+                return _LibSQLConnWrapper(conn)
 
+            from sqlalchemy.pool import NullPool
             engine = create_engine(
                 "sqlite+pysqlite://",
                 creator=_creator,
-                connect_args={},
+                poolclass=NullPool,
+                pool_pre_ping=False,
             )
 
-            # Trigger a sync on connect
-            @event.listens_for(engine, "connect")
-            def do_sync(dbapi_conn, _):
-                dbapi_conn.sync()
-
             log.info("Database connected to Turso (persistent).")
+
         except Exception as e:
             log.error(
                 "Turso connection failed: %s — falling back to local SQLite", e
             )
-            turso_url = ""  # trigger fallback
+            turso_url = ""
 
     if not turso_url or not turso_token:
         # Local dev / CI: plain SQLite with WAL mode
