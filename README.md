@@ -87,6 +87,10 @@ The ablation result proves that the model classifies using operational telemetry
 
 Classes: Build Failure, Configuration Error, Dependency Error, Deployment Failure, Network Error, Permission Error, Resource Exhaustion, Security Scan Failure, Test Failure, Timeout.
 
+### Confusion Matrix
+
+![Confusion Matrix](assets/confusion_matrix.png)
+
 ## Security
 
 Security is enforced across the application lifecycle through HMAC-SHA256 webhook verification to guarantee the authenticity of incoming GitHub payloads. All `.joblib` model artifacts are cryptographically signed with HMAC to prevent arbitrary code execution vulnerabilities during `joblib.load()`. API key authentication protects all non-public administrative and data endpoints. Traffic is controlled using rate limiting via slowapi, while a strict 2MB payload size cap prevents resource exhaustion attacks. All cryptographic verifications use timing-safe comparisons via `hmac.compare_digest`.
