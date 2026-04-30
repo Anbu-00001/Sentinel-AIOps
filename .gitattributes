@@ -2,4 +2,5 @@
 *.npy filter=lfs diff=lfs merge=lfs -text
 *.db-wal filter=lfs diff=lfs merge=lfs -text
 *.db-shm filter=lfs diff=lfs merge=lfs -text
-*.joblib filter=lfs diff=lfs merge=lfs -text
+# *.joblib intentionally NOT tracked by LFS — committed as regular git objects
+# (git-lfs unavailable; artifacts are <10MB each)

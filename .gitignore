@@ -28,8 +28,8 @@ data/data_summary.json
 # Ignore SQLite databases
 data/*.db
 
-# Ignore scikit-learn/LightGBM joblib artifacts (~100MB+)
-models/*.joblib
+# joblib artifacts are committed as regular git objects (no LFS)
+# models/*.joblib   ← intentionally NOT ignored; committed for HF deployment
 
 # ── Runtime ML outputs (generated, not source) ──────────────────────────────
 models/drift_report.json
@@ -37,7 +37,7 @@ models/anomaly_scores.npy
 models/pr_curve.png
 models/confusion_matrix.png
 models/feature_importance.png
-models/*.sig
+# models/*.sig    ← intentionally NOT ignored; signatures committed alongside models
 models/v2_report.json
 models/metrics.json
 

@@ -106,7 +106,12 @@ def _secure_load(artifact_name):
         if os.getenv("TESTING") == "1":
             return None
         log.error("CRITICAL: Artifact signature validation failed for %s", filepath)
-        raise SystemExit(1)
+        # Raise RuntimeError (not SystemExit) so load_artifacts()'s
+        # `except Exception` block can catch it and degrade gracefully.
+        raise RuntimeError(
+            f"Artifact signature validation failed for {artifact_name}. "
+            "Ensure MODEL_SIGNATURE_SECRET is set and models are signed."
+        )
     return joblib.load(filepath)
 
 
