@@ -51,11 +51,17 @@ def _build_engine():
             import libsql_experimental as libsql
 
             def _creator():
-                return libsql.connect(
+                conn = libsql.connect(
                     database=db_path,
                     sync_url=turso_url,
                     auth_token=turso_token,
                 )
+                # SQLAlchemy's pysqlite dialect calls create_function() to
+                # register REGEXP support. libsql doesn't implement this method.
+                # Patch it with a no-op so SQLAlchemy's hook doesn't crash.
+                if not hasattr(conn, "create_function"):
+                    conn.create_function = lambda *args, **kwargs: None
+                return conn
 
             engine = create_engine(
                 "sqlite+pysqlite://",
