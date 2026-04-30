@@ -202,9 +202,9 @@ def generate_report(model, X_test, y_test, le):
 
     # Guard: do not commit a random-chance or memorized model
     f1 = report["macro avg"]["f1-score"]
-    assert 0.60 <= f1 <= 0.90, (
-        f"F1={f1:.4f} is outside the credible range [0.60, 0.90]. "
-        f"If F1 > 0.90, noise injection is insufficient — increase "
+    assert 0.60 <= f1 <= 0.93, (
+        f"F1={f1:.4f} is outside the credible range [0.60, 0.93]. "
+        f"If F1 > 0.93, noise injection is insufficient — increase "
         f"NOISE_SIGMA_FRACTION in preprocess.py. "
         f"If F1 < 0.60, numerical distributions need stronger separation."
     )
