@@ -11,6 +11,7 @@ import os
 
 # ── Environment setup (must precede ALL project imports) ─────────────────────
 os.environ["TESTING"] = "1"
+os.environ["SENTINEL_DB_PATH"] = ":memory:"
 
 # ── Clear secrets that may leak from the user's shell environment ────────────
 # Individual tests that need these secrets set them explicitly and clean up.

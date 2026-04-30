@@ -1,100 +1,97 @@
 """
 session.py — Sentinel-AIOps Database Session Management
 =========================================================
-Engine creation, session factory, and initialization helpers.
+Engine creation with Turso (persistent cloud SQLite) support
+and local SQLite fallback for dev/CI.
 
-For :memory: databases (tests), uses SQLAlchemy StaticPool so that
-all connections share the same in-memory database instance.
+Turso mode:  TURSO_DATABASE_URL + TURSO_AUTH_TOKEN set → embedded replica
+Local mode:  No Turso credentials → plain SQLite with WAL
+Test mode:   SENTINEL_DB_PATH=:memory: → in-memory with StaticPool
 """
 
-import logging
 import os
+import logging
 from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database.models import Base
 
-
-# ── SQLite WAL Mode ──────────────────────────────────────────────────────────
-# WAL (Write-Ahead Logging) allows concurrent reads while a write is in
-# progress, preventing "database is locked" errors under multi-worker setups.
-@event.listens_for(Engine, "connect")
-def _set_sqlite_pragma(dbapi_connection, connection_record):
-    """Enable WAL journal mode and busy timeout for every SQLite connection."""
-    import sqlite3
-    if isinstance(dbapi_connection, sqlite3.Connection):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=5000")  # Wait up to 5s if locked
-        cursor.close()
-
-
-# ── Logging ───────────────────────────────────────────────────────────────────
 log = logging.getLogger("sentinel.database")
 
-# ── Database path ─────────────────────────────────────────────────────────────
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+def _build_engine():
+    """
+    Create a SQLAlchemy engine.
 
-def _db_path() -> str:
-    """Return current DB path (respects SENTINEL_DB_PATH env override)."""
-    return os.environ.get(
-        "SENTINEL_DB_PATH",
-        os.path.join(ROOT, "data", "sentinel.db"),
+    Reads TURSO_DATABASE_URL and TURSO_AUTH_TOKEN directly from os.getenv()
+    (NOT from config module) to guarantee we see the latest env at call time.
+    """
+    # ── Diagnostic: log whether Turso env var is visible ──────────────
+    turso_url_raw = os.environ.get("TURSO_DATABASE_URL", "NOT_SET")
+    log.info(
+        "Reasoning: DB engine init — TURSO_DATABASE_URL present: %s",
+        "YES" if turso_url_raw and turso_url_raw != "NOT_SET" else "NO"
     )
 
+    turso_url = os.getenv("TURSO_DATABASE_URL", "").strip()
+    turso_token = os.getenv("TURSO_AUTH_TOKEN", "").strip()
+    db_path = os.getenv("SENTINEL_DB_PATH", "/app/data/sentinel.db")
 
-def _make_engine():
-    """
-    Create a SQLAlchemy engine pointed at the current DB_PATH.
+    # Ensure parent directory exists (safe no-op for :memory:)
+    try:
+        if db_path != ":memory:":
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    except (OSError, PermissionError):
+        pass
 
-    For :memory: databases, uses StaticPool so ALL connections share
-    the same in-memory database — critical for test isolation.
-    """
-    path = _db_path()
-    if path == ":memory:":
-        engine = create_engine(
-            "sqlite:///:memory:",
-            echo=False,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+    if turso_url and turso_token:
+        # Production: Turso embedded replica mode
+        # Local file acts as replica; syncs to Turso on every write
+        log.info(
+            "Reasoning: TURSO_DATABASE_URL detected. "
+            "Connecting via sqlalchemy-libsql embedded replica."
         )
+        engine = create_engine(
+            f"sqlite+libsql:///{db_path}",
+            connect_args={
+                "auth_token": turso_token,
+                "sync_url": turso_url,
+            },
+        )
+        log.info("Database connected to Turso (persistent).")
     else:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        engine = create_engine(
-            f"sqlite:///{path}",
-            echo=False,
-            connect_args={"check_same_thread": False},
+        # Local dev / CI: plain SQLite with WAL mode
+        log.info(
+            "Reasoning: No TURSO credentials found. "
+            "Falling back to local SQLite at %s", db_path
         )
+        kwargs = {"connect_args": {"check_same_thread": False}}
+        if db_path == ":memory:":
+            kwargs["poolclass"] = StaticPool
+
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            **kwargs
+        )
+        # Enable WAL mode for local SQLite only
+        # (Turso manages its own WAL — sending PRAGMA causes errors)
+        @event.listens_for(engine, "connect")
+        def set_wal_mode(dbapi_conn, _):
+            dbapi_conn.execute("PRAGMA journal_mode=WAL")
+            dbapi_conn.execute("PRAGMA synchronous=NORMAL")
+
+        log.info("Database initialized at %s", db_path)
+
     return engine
 
 
-# ── Module-level singletons (lazily initialized) ─────────────────────────────
-_engine = None
-_SessionLocal = None
-
-
-def _get_engine():
-    global _engine
-    if _engine is None:
-        _engine = _make_engine()
-    return _engine
-
-
-def _get_session_factory():
-    global _SessionLocal
-    if _SessionLocal is None:
-        _SessionLocal = sessionmaker(
-            bind=_get_engine(),
-            autocommit=False,
-            autoflush=False,
-        )
-    return _SessionLocal
+# ── Module-level singletons ──────────────────────────────────────────────────
+engine = _build_engine()
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 def init_db() -> None:
@@ -104,21 +101,22 @@ def init_db() -> None:
     Rebuilds the engine/session so SENTINEL_DB_PATH overrides (e.g. :memory:
     for tests) are always honoured even after the module has been imported.
     """
-    global _engine, _SessionLocal
-    _engine = _make_engine()
-    _SessionLocal = sessionmaker(
-        bind=_engine,
+    global engine, SessionLocal
+    engine = _build_engine()
+    SessionLocal = sessionmaker(
+        bind=engine,
         autocommit=False,
         autoflush=False,
     )
-    Base.metadata.create_all(bind=_engine)
-    log.info("Database initialized at %s", _db_path())
+    Base.metadata.create_all(bind=engine)
+    db_path = os.getenv("SENTINEL_DB_PATH", "/app/data/sentinel.db")
+    log.info("Database initialized at %s", db_path)
 
 
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
     """Yield a transactional session, auto-closing on exit."""
-    session = _get_session_factory()()
+    session = SessionLocal()
     try:
         yield session
         session.commit()
