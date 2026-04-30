@@ -109,6 +109,7 @@ Sentinel-AIOps/
 │   ├── drift_monitor.py      # PSI + Chi-Square drift computation
 │   └── crypto_sig.py         # HMAC-SHA256 artifact signing
 ├── database/session.py       # SQLAlchemy + SQLite WAL setup
+│                             # SQLAlchemy + Turso (libsql) in prod, plain SQLite in dev/CI
 ├── sentinel_logging.py       # Centralized JSON logging (all modules)
 ├── config.py                 # All thresholds and env var loading
 ├── Dockerfile.hf             # Single-container HF Spaces build
@@ -151,6 +152,10 @@ python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8200
 Single Docker container running nginx + uvicorn via supervisord.
 See `Dockerfile.hf` and full steps in `RUNBOOK.md → Hugging Face Spaces Deployment`.
 
+TURSO_DATABASE_URL and TURSO_AUTH_TOKEN enable persistent inference
+history via Turso (libsql). Without these, the Space falls back to
+ephemeral SQLite and history resets on restart.
+
 **Local Docker:**
 ```bash
 make docker-build && make docker-up
@@ -176,6 +181,7 @@ make docker-build && make docker-up
 5. Heuristic CPU/memory features — GitHub webhooks don't expose resource metrics
 6. No automated retraining — PSI signal requires manual `make retrain`
 7. Prometheus counters reset on restart
+8. SQLite inference history on HF Spaces — resolved via Turso cloud database (libsql). Inference history now persists across Space restarts. Local dev and CI still use ephemeral SQLite.
 
 ## Roadmap
 
